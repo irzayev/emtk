@@ -64,6 +64,7 @@ class Apartment(db.Model):
     area = db.Column(db.Float, nullable=False)
     owner_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     owner = db.relationship("User", backref="apartments")
+    credit_balance = db.Column(db.Float, nullable=False, default=0)
 
 
 class Tariff(db.Model):
@@ -195,6 +196,38 @@ def audit(action: str) -> None:
         db.session.commit()
 
 
+def _apply_credit_to_invoice(invoice: "Invoice") -> float:
+    """Apply apartment credit to this invoice, return applied amount."""
+    apt = invoice.apartment
+    if not apt:
+        return 0.0
+    credit = float(apt.credit_balance or 0)
+    if credit <= 0:
+        return 0.0
+    remaining = max(0.0, float(invoice.amount or 0) - float(invoice.paid_amount or 0))
+    if remaining <= 0:
+        return 0.0
+    applied = min(credit, remaining)
+    invoice.paid_amount = round(float(invoice.paid_amount or 0) + applied, 2)
+    apt.credit_balance = round(credit - applied, 2)
+    invoice.status = "odenilib" if float(invoice.paid_amount or 0) >= float(invoice.amount or 0) else "gozlemede"
+    return round(applied, 2)
+
+
+def _move_invoice_overpay_to_credit(invoice: "Invoice") -> float:
+    """If invoice is overpaid, cap paid_amount and move overflow to apartment credit."""
+    apt = invoice.apartment
+    if not apt:
+        return 0.0
+    overflow = float(invoice.paid_amount or 0) - float(invoice.amount or 0)
+    if overflow <= 0:
+        return 0.0
+    invoice.paid_amount = float(invoice.amount or 0)
+    apt.credit_balance = round(float(apt.credit_balance or 0) + overflow, 2)
+    invoice.status = "odenilib"
+    return round(overflow, 2)
+
+
 def save_uploaded_image(file_storage):
     if not file_storage or not file_storage.filename:
         return None
@@ -233,6 +266,13 @@ def ensure_payment_schema():
             conn.exec_driver_sql("ALTER TABLE payment ADD COLUMN reviewed_at DATETIME")
         if "comment" not in columns:
             conn.exec_driver_sql("ALTER TABLE payment ADD COLUMN comment VARCHAR(255)")
+
+
+def ensure_apartment_schema():
+    with db.engine.connect() as conn:
+        columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(apartment)")}
+        if "credit_balance" not in columns:
+            conn.exec_driver_sql("ALTER TABLE apartment ADD COLUMN credit_balance FLOAT NOT NULL DEFAULT 0")
 
 
 def ensure_system_schema():
@@ -495,10 +535,14 @@ def dashboard():
         apartment, apartments = get_selected_apartment(user)
         invoices = Invoice.query.filter_by(apartment_id=apartment.id).order_by(Invoice.created_at.desc()).all() if apartment else []
         # For resident view we show both debt and credit (overpayment).
-        debt = sum((i.amount - i.paid_amount) for i in invoices)
+        base_debt = sum((i.amount - i.paid_amount) for i in invoices)
+        credit_balance = float(apartment.credit_balance or 0) if apartment else 0.0
+        debt = round(float(base_debt) - credit_balance, 2)
         # Building-wide metrics (read-only for residents).
         debt_expr = db.case((Invoice.amount - Invoice.paid_amount > 0, Invoice.amount - Invoice.paid_amount), else_=0.0)
         house_total_debt = db.session.query(db.func.sum(debt_expr)).scalar() or 0
+        house_credit_total = db.session.query(db.func.sum(Apartment.credit_balance)).scalar() or 0
+        house_total_debt = max(0.0, float(house_total_debt or 0) - float(house_credit_total or 0))
         income_total = (
             db.session.query(db.func.sum(Payment.amount)).filter(Payment.status == "confirmed").scalar() or 0
         )
@@ -530,6 +574,7 @@ def dashboard():
             apartments=apartments,
             invoices=invoices,
             debt=round(debt, 2),
+            credit_balance=round(credit_balance, 2),
             house_total_debt=round(float(house_total_debt or 0), 2),
             house_balance=house_balance,
             unpaid_expenses=unpaid_expenses,
@@ -545,9 +590,12 @@ def dashboard():
     from_dt = datetime.strptime(from_date, "%Y-%m-%d") if from_date else datetime(date.today().year, date.today().month, 1)
     to_dt = datetime.strptime(to_date, "%Y-%m-%d") if to_date else datetime.utcnow()
     apartments_count = Apartment.query.count()
-    # Total debt should not be reduced by overpayments (credit).
+    # Total debt should not be reduced by overpayments (credit) inside invoices,
+    # but should be reduced by apartment credit balances.
     debt_expr = db.case((Invoice.amount - Invoice.paid_amount > 0, Invoice.amount - Invoice.paid_amount), else_=0.0)
     debt = db.session.query(db.func.sum(debt_expr)).scalar() or 0
+    house_credit_total = db.session.query(db.func.sum(Apartment.credit_balance)).scalar() or 0
+    debt = max(0.0, float(debt or 0) - float(house_credit_total or 0))
     pending_invoices = Invoice.query.filter(Invoice.status != "odenilib").count()
     recent_logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(10).all()
     period_payments = Payment.query.filter(
@@ -600,12 +648,18 @@ def dashboard():
         chart_payments.append(round(income, 2))
         chart_expenses.append(round(out, 2))
         chart_balance.append(running)
-    debt_by_apartment = (
-        db.session.query(Apartment.number, db.func.sum(debt_expr))
+    # Debt by apartment with credit applied.
+    debt_rows = (
+        db.session.query(Apartment.id, Apartment.number, db.func.sum(debt_expr), Apartment.credit_balance)
         .join(Invoice, Invoice.apartment_id == Apartment.id)
         .group_by(Apartment.id)
         .all()
     )
+    debt_by_apartment = []
+    for apt_id, apt_no, inv_debt_sum, credit_bal in debt_rows:
+        v = max(0.0, float(inv_debt_sum or 0) - float(credit_bal or 0))
+        debt_by_apartment.append((apt_no, round(v, 2)))
+    debt_by_apartment.sort(key=lambda x: x[0])
 
     income_total = db.session.query(db.func.sum(Payment.amount)).filter(Payment.status == "confirmed").scalar() or 0
     topup_total = db.session.query(db.func.sum(BalanceTopUp.amount)).scalar() or 0
@@ -830,6 +884,21 @@ def generate_invoices():
 
     db.session.commit()
 
+    # Auto-apply apartment credit to newly created invoices.
+    if created:
+        new_invoices = (
+            Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
+            .filter(Invoice.period == period)
+            .order_by(Apartment.number.asc(), Invoice.id.asc())
+            .all()
+        )
+        applied_total = 0.0
+        for inv in new_invoices:
+            applied_total += _apply_credit_to_invoice(inv)
+        if applied_total > 0:
+            db.session.commit()
+            audit(f"Kredit avtomatik tetbiq olundu: {applied_total:.2f} AZN period {period}")
+
     templates = ExpenseTemplate.query.filter_by(is_active=True, is_recurring=True).all()
     created_exp = 0
     for t in templates:
@@ -887,6 +956,9 @@ def recalculate_invoices():
             continue
         inv.amount = total
         inv.status = "odenilib" if float(inv.paid_amount or 0) >= float(inv.amount or 0) else "gozlemede"
+        overflow = _move_invoice_overpay_to_credit(inv)
+        if overflow > 0:
+            audit(f"Kredit yarandi (yeniden hesabla) invoice#{inv.id}: +{overflow:.2f} AZN")
         updated += 1
 
     db.session.commit()
@@ -1037,11 +1109,15 @@ def confirm_payment(payment_id):
     apply_amount = float(payment.amount)
     invoice.paid_amount = round(invoice.paid_amount + apply_amount, 2)
     invoice.status = "odenilib" if invoice.paid_amount >= invoice.amount else "gozlemede"
+    overflow = _move_invoice_overpay_to_credit(invoice)
     payment.status = "confirmed"
     payment.reviewer_user_id = current_user().id
     payment.reviewed_at = datetime.utcnow()
     db.session.commit()
-    audit(f"Odenis tesdiqlendi #{payment.id} {apply_amount:.2f} AZN")
+    if overflow > 0:
+        audit(f"Odenis tesdiqlendi #{payment.id} {apply_amount:.2f} AZN (kredit +{overflow:.2f})")
+    else:
+        audit(f"Odenis tesdiqlendi #{payment.id} {apply_amount:.2f} AZN")
     flash("Odenis tesdiqlendi.", "success")
     return redirect(url_for("admin_invoices"))
 
@@ -1083,6 +1159,7 @@ def add_payment(invoice_id):
     now = datetime.utcnow()
     invoice.paid_amount = round(invoice.paid_amount + apply_amount, 2)
     invoice.status = "odenilib" if invoice.paid_amount >= invoice.amount else "gozlemede"
+    overflow = _move_invoice_overpay_to_credit(invoice)
     db.session.add(
         Payment(
             invoice_id=invoice.id,
@@ -1095,7 +1172,10 @@ def add_payment(invoice_id):
         )
     )
     db.session.commit()
-    audit(f"Odenis daxil edildi invoice#{invoice.id} {apply_amount:.2f} AZN")
+    if overflow > 0:
+        audit(f"Odenis daxil edildi invoice#{invoice.id} {apply_amount:.2f} AZN (kredit +{overflow:.2f})")
+    else:
+        audit(f"Odenis daxil edildi invoice#{invoice.id} {apply_amount:.2f} AZN")
     flash("Odenis daxil edildi.", "success")
     return redirect(url_for("admin_invoices"))
 
@@ -1672,6 +1752,7 @@ if __name__ == "__main__":
         db.create_all()
         ensure_poll_schema()
         ensure_payment_schema()
+        ensure_apartment_schema()
         ensure_system_schema()
         ensure_expense_schema()
         ensure_balance_schema()
