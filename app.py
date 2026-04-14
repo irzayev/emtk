@@ -483,6 +483,7 @@ def dashboard():
         topup_total = db.session.query(db.func.sum(BalanceTopUp.amount)).scalar() or 0
         expenses_total = db.session.query(db.func.sum(Expense.amount)).scalar() or 0
         house_balance = round(float(income_total) + float(topup_total) - float(expenses_total), 2)
+        unpaid_expenses = max(0.0, round(float(expenses_total) - (float(income_total) + float(topup_total)), 2))
         recent_expenses = Expense.query.order_by(Expense.created_at.desc()).limit(100).all()
         receipt_by_invoice = {}
         for i in invoices:
@@ -507,6 +508,7 @@ def dashboard():
             debt=round(debt, 2),
             house_total_debt=round(float(house_total_debt or 0), 2),
             house_balance=house_balance,
+            unpaid_expenses=unpaid_expenses,
             recent_expenses=recent_expenses,
             receipt_by_invoice=receipt_by_invoice,
             works=works,

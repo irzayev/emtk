@@ -69,13 +69,8 @@
     <div class="col-md-4">
         <div class="card metric-card border-0 shadow-sm">
             <div class="card-body">
-                <div class="text-muted small">Xərclər (son)</div>
-                {% if recent_expenses and recent_expenses[0] %}
-                    <div class="h6 mb-0 text-danger">{{ recent_expenses[0].amount|azn }}</div>
-                    <div class="small text-muted">{{ recent_expenses[0].name }}</div>
-                {% else %}
-                    <div class="h6 mb-0 text-muted">-</div>
-                {% endif %}
+                <div class="text-muted small">Ödənilməmiş xərclər (bina)</div>
+                <div class="h5 mb-0 text-danger">{{ unpaid_expenses|azn }}</div>
             </div>
         </div>
     </div>
