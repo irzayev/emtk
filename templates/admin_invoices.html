@@ -11,17 +11,23 @@
                 <thead><tr><th>Mənzil</th><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Balans</th><th>Status</th><th>Ödəniş daxil et</th><th>Hesab-faktura</th><th>Email</th></tr></thead>
                 <tbody>
                 {% for i in invoices %}
-                    {% set debt = (i.amount - i.paid_amount) %}
+                    {% set credit = (i.apartment.credit_balance or 0) %}
+                    {% set balance = (i.amount - i.paid_amount - credit) %}
                     <tr>
                         <td>{{ i.apartment.number }}</td>
                         <td>{{ i.period }}</td>
                         <td>{{ i.amount|azn }}</td>
-                        <td>{{ i.paid_amount|azn }}</td>
                         <td>
-                            {% if debt > 0 %}
-                                <span class="text-danger fw-semibold">{{ debt|azn }}</span>
-                            {% elif debt < 0 %}
-                                <span class="text-success fw-semibold">+{{ (-debt)|azn }}</span>
+                            <div>{{ i.paid_amount|azn }}</div>
+                            {% if credit and credit != 0 %}
+                                <div class="small text-muted">Kredit: {{ credit|azn }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if balance > 0 %}
+                                <span class="text-danger fw-semibold">{{ balance|azn }}</span>
+                            {% elif balance < 0 %}
+                                <span class="text-success fw-semibold">+{{ (-balance)|azn }}</span>
                             {% else %}
                                 <span class="text-muted">{{ 0|azn }}</span>
                             {% endif %}

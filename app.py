@@ -803,7 +803,12 @@ def admin_apartments():
         .group_by(Invoice.apartment_id)
         .all()
     )
-    debt_by_apartment_id = {apt_id: float(total or 0) for apt_id, total in debt_rows}
+    inv_balance_by_apartment_id = {apt_id: float(total or 0) for apt_id, total in debt_rows}
+    debt_by_apartment_id = {}
+    for a in apartments:
+        inv_bal = float(inv_balance_by_apartment_id.get(a.id, 0) or 0)
+        credit = float(a.credit_balance or 0)
+        debt_by_apartment_id[a.id] = round(inv_bal - credit, 2)
     return render_template(
         "admin_apartments.html",
         apartments=apartments,
