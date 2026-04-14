@@ -8,7 +8,7 @@
     <div class="card-body">
         <div class="table-responsive">
             <table class="table">
-                <thead><tr><th>Menzil</th><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Borc</th><th>Status</th><th>Ödəniş daxil et</th><th>Hesab-faktura</th><th>Email</th></tr></thead>
+                <thead><tr><th>Mənzil</th><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Borc</th><th>Status</th><th>Ödəniş daxil et</th><th>Hesab-faktura</th><th>Email</th></tr></thead>
                 <tbody>
                 {% for i in invoices %}
                     {% set debt = (i.amount - i.paid_amount) %}
