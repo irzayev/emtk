@@ -7,7 +7,10 @@ from functools import wraps
 from pathlib import Path
 
 from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -18,6 +21,17 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:////ap
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "change-this-in-production")
 app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
+
+# Session cookie hardening (behind HTTPS reverse proxy).
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
+app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "1") == "1"
+
+# CSRF protection for all mutating requests.
+csrf = CSRFProtect(app)
+
+# Basic rate limiting (in-memory). For multi-instance production, use Redis storage.
+limiter = Limiter(get_remote_address, app=app, default_limits=[])
 db = SQLAlchemy(app)
 
 
@@ -403,6 +417,7 @@ def root():
 
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute")
 def login():
     if request.method == "POST":
         email = request.form["email"].strip().lower()
@@ -1526,6 +1541,9 @@ if __name__ == "__main__":
         ensure_tariff_scope_schema()
         ensure_user_role_migration()
         get_smtp_config()
+    # Fail fast in production if SECRET_KEY is not set.
+    if os.getenv("FLASK_DEBUG", "0") != "1" and app.config["SECRET_KEY"] == "change-this-in-production":
+        raise RuntimeError("SECRET_KEY must be set in production.")
     host = os.getenv("FLASK_HOST", "0.0.0.0")
     port = int(os.getenv("FLASK_PORT", "5000"))
     debug = os.getenv("FLASK_DEBUG", "1") == "1"

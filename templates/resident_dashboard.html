@@ -6,6 +6,7 @@
 </div>
 {% if apartments %}
 <form method="post" action="{{ url_for('select_apartment') }}" class="mb-3 d-flex gap-2 align-items-center">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label class="small text-muted mb-0">Menzil secimi:</label>
     <select class="form-select form-select-sm w-auto" name="apartment_id" onchange="this.form.submit()">
         {% for apt in apartments %}

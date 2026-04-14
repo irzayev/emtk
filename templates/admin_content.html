@@ -10,6 +10,7 @@
             <div class="card-body">
                 <h5>İş əlavə et</h5>
                 <form method="post" enctype="multipart/form-data" class="vstack gap-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="form_type" value="work">
                     <input class="form-control" name="title" placeholder="Basliq" required>
                     <textarea class="form-control" name="description" placeholder="Tesvir" required></textarea>
@@ -27,6 +28,7 @@
             <div class="card-body">
                 <h5>Elan əlavə et</h5>
                 <form method="post" class="vstack gap-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="form_type" value="announcement">
                     <input class="form-control" name="title" placeholder="Basliq" required>
                     <textarea class="form-control" name="text" placeholder="Metn" required></textarea>
@@ -59,11 +61,13 @@
                     <div class="mt-2 d-flex gap-2">
                         <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-worklog-{{ w.id }}">Redakte et</button>
                         <form method="post" action="{{ url_for('delete_worklog', worklog_id=w.id) }}" onsubmit="return confirm('Удалить работу?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button class="btn btn-sm btn-outline-danger">Sil</button>
                         </form>
                     </div>
                     <div class="collapse mt-2" id="edit-worklog-{{ w.id }}">
                         <form method="post" action="{{ url_for('update_worklog', worklog_id=w.id) }}" enctype="multipart/form-data" class="vstack gap-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input class="form-control" name="title" value="{{ w.title }}" required>
                             <textarea class="form-control" name="description" required>{{ w.description }}</textarea>
                             <div class="row g-2">
@@ -97,11 +101,13 @@
                     <div class="mt-2 d-flex gap-2">
                         <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-announcement-{{ a.id }}">Redakte et</button>
                         <form method="post" action="{{ url_for('delete_announcement', announcement_id=a.id) }}" onsubmit="return confirm('Удалить объявление?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button class="btn btn-sm btn-outline-danger">Sil</button>
                         </form>
                     </div>
                     <div class="collapse mt-2" id="edit-announcement-{{ a.id }}">
                         <form method="post" action="{{ url_for('update_announcement', announcement_id=a.id) }}" class="vstack gap-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input class="form-control" name="title" value="{{ a.title }}" required>
                             <textarea class="form-control" name="text" required>{{ a.text }}</textarea>
                             <button class="btn btn-primary btn-sm">Yadda saxla</button>

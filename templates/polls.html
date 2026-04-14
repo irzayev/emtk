@@ -10,6 +10,7 @@
     <div class="card-body">
         <h5>Yeni sorğu yarat</h5>
         <form method="post" class="row g-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="form_type" value="create_poll">
             <div class="col-md-6"><input class="form-control" name="title" placeholder="Sual" required></div>
             <div class="col-md-2 form-check d-flex align-items-center">
@@ -55,6 +56,7 @@
         {% if session.get('user_id') and row.poll.is_open %}
             {% if not row.voted %}
             <form method="post" class="d-flex gap-2 mt-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="poll_id" value="{{ row.poll.id }}">
                 <button class="btn btn-success btn-sm" name="choice" value="yes">He</button>
                 <button class="btn btn-danger btn-sm" name="choice" value="no">Yox</button>
@@ -68,6 +70,7 @@
 
         {% if user.role in ['komendant', 'superadmin'] %}
         <form method="post" class="mt-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="form_type" value="toggle_poll_status">
             <input type="hidden" name="poll_id" value="{{ row.poll.id }}">
             <button class="btn btn-sm {{ 'btn-outline-danger' if row.poll.is_open else 'btn-outline-success' }}">

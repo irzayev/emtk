@@ -5,6 +5,7 @@
     <div class="card-body">
         <h5>Mənzil əlavə et</h5>
         <form method="post" class="row g-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="col-md-3"><input class="form-control" name="number" placeholder="Nomre" required></div>
             <div class="col-md-2"><input class="form-control" type="number" name="floor" placeholder="Mərtəbə" required></div>
             <div class="col-md-2"><input class="form-control" type="number" step="0.01" name="area" placeholder="Sahə" required></div>
@@ -45,6 +46,7 @@
                         <td class="text-end">
                             <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-apartment-{{ a.id }}">Redakte et</button>
                             <form method="post" action="{{ url_for('delete_apartment', apartment_id=a.id) }}" class="d-inline" onsubmit="return confirm('Удалить квартиру?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button class="btn btn-sm btn-outline-danger">Sil</button>
                             </form>
                         </td>
@@ -52,6 +54,7 @@
                     <tr class="collapse" id="edit-apartment-{{ a.id }}">
                         <td colspan="6" class="bg-light">
                             <form method="post" action="{{ url_for('update_apartment', apartment_id=a.id) }}" class="row g-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <div class="col-md-3"><input class="form-control" name="number" value="{{ a.number }}" required></div>
                                 <div class="col-md-2"><input class="form-control" type="number" name="floor" value="{{ a.floor }}" required></div>
                                 <div class="col-md-2"><input class="form-control" type="number" step="0.01" name="area" value="{{ a.area }}" required></div>

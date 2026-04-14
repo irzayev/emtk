@@ -4,6 +4,7 @@
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="post" class="row g-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="col-md-4"><input class="form-control" name="name" placeholder="Ad" required></div>
             <div class="col-md-3">
                 <select class="form-select" name="type" required>
@@ -36,6 +37,7 @@
     <div class="card-body">
         <h5 class="mb-2">Yenidən hesabla</h5>
         <form method="post" action="{{ url_for('recalculate_invoices') }}" class="row g-2 align-items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="col-md-3">
                 <label class="form-label">Period (YYYY-MM)</label>
                 <input class="form-control js-monthpicker" name="period" placeholder="2026-04" required>
@@ -70,6 +72,7 @@
                     </td>
                     <td class="text-end">
                         <form method="post" action="{{ url_for('delete_tariff', tariff_id=t.id) }}" onsubmit="return confirm('Удалить тариф?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button class="btn btn-sm btn-outline-danger">Sil</button>
                         </form>
                     </td>

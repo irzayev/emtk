@@ -9,6 +9,7 @@
                     Qeydiyyatdan sonra menzil komendant ve ya administrator terefinden teyin edilir.
                 </div>
                 <form method="post" class="row g-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="col-12">
                         <label class="form-label">Ad Soyad</label>
                         <input class="form-control" name="full_name" required>

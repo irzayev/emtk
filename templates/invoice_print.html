@@ -4,6 +4,7 @@
     <h3 class="mb-0">Hesab-faktura</h3>
     <div class="d-flex gap-2">
         <form method="post" action="{{ url_for('send_invoice_email', invoice_id=invoice.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-outline-primary">Email göndər</button>
         </form>
         <button class="btn btn-outline-secondary" onclick="window.print()">Cap et</button>

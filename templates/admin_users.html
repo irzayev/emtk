@@ -9,6 +9,7 @@
     <div class="card-body">
         <h5 class="mb-3">İstifadəçi əlavə et</h5>
         <form method="post" action="{{ url_for('admin_user_create') }}" class="row g-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="col-md-4">
                 <input class="form-control" name="full_name" placeholder="Ad Soyad" required>
             </div>
@@ -60,6 +61,7 @@
                         <td class="text-end">
                             <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-user-{{ u.id }}">Redaktə et</button>
                             <form method="post" action="{{ url_for('admin_user_delete', user_id=u.id) }}" class="d-inline" onsubmit="return confirm('İstifadəçi silinsin?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button class="btn btn-sm btn-outline-danger">Sil</button>
                             </form>
                         </td>
@@ -67,6 +69,7 @@
                     <tr class="collapse" id="edit-user-{{ u.id }}">
                         <td colspan="6" class="bg-light">
                             <form method="post" action="{{ url_for('admin_user_update', user_id=u.id) }}" class="row g-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <div class="col-md-4">
                                     <label class="form-label small mb-1">Ad</label>
                                     <input class="form-control" name="full_name" value="{{ u.full_name }}" required>
