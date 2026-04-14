@@ -6,7 +6,7 @@ from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
 
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -1164,6 +1164,8 @@ def admin_settings():
 
 @app.route("/init")
 def init_data():
+    if os.getenv("ENABLE_INIT_ROUTE", "0") != "1":
+        abort(404)
     db.create_all()
     if User.query.count() == 0:
         superadmin = User(
