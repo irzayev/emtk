@@ -1,4 +1,5 @@
 import os
+import re
 import smtplib
 import uuid
 from datetime import date, datetime
@@ -470,6 +471,13 @@ def get_selected_apartment(user):
     return selected, apartments
 
 
+def normalize_az_phone(phone_raw: str):
+    phone = (phone_raw or "").strip()
+    if not phone:
+        return None
+    return phone if re.fullmatch(r"\+994\d{9}", phone) else None
+
+
 def can_view_poll_results(user, poll_obj, voted):
     if user.role in ("komendant", "superadmin"):
         return True
@@ -544,6 +552,10 @@ def register():
         phone = request.form.get("phone", "").strip()
         email = request.form["email"].strip().lower()
         password = request.form["password"]
+
+        if phone and not normalize_az_phone(phone):
+            flash("Telefon formatı +994XXXXXXXXX olmalıdır.", "danger")
+            return redirect(url_for("register"))
 
         if User.query.filter_by(email=email).first():
             flash("Bu email ile qeydiyyatdan kecmis istifadeci var.", "warning")
@@ -1508,6 +1520,9 @@ def admin_user_create():
     if not full_name or not email or not password:
         flash("Zorunlu sahələr boş ola bilməz.", "danger")
         return redirect(url_for("admin_users"))
+    if phone and not normalize_az_phone(phone):
+        flash("Telefon formatı +994XXXXXXXXX olmalıdır.", "danger")
+        return redirect(url_for("admin_users"))
     if role == "commandant":
         role = "komendant"
     if role not in ("resident", "komendant", "superadmin"):
@@ -1546,6 +1561,9 @@ def admin_user_update(user_id):
 
     if not full_name or not email:
         flash("Ad və email boş ola bilməz.", "danger")
+        return redirect(url_for("admin_users"))
+    if phone and not normalize_az_phone(phone):
+        flash("Telefon formatı +994XXXXXXXXX olmalıdır.", "danger")
         return redirect(url_for("admin_users"))
     if role == "commandant":
         role = "komendant"

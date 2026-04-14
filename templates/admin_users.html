@@ -14,7 +14,7 @@
                 <input class="form-control" name="full_name" placeholder="Ad Soyad" required>
             </div>
             <div class="col-md-2">
-                <input class="form-control" name="phone" placeholder="Telefon">
+                <input class="form-control" name="phone" placeholder="+994XXXXXXXXX" pattern="\+994[0-9]{9}" title="Format: +994XXXXXXXXX">
             </div>
             <div class="col-md-3">
                 <input class="form-control" type="email" name="email" placeholder="Email" required>
@@ -76,7 +76,7 @@
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label small mb-1">Telefon</label>
-                                    <input class="form-control" name="phone" value="{{ u.phone or '' }}">
+                                    <input class="form-control" name="phone" value="{{ u.phone or '' }}" placeholder="+994XXXXXXXXX" pattern="\+994[0-9]{9}" title="Format: +994XXXXXXXXX">
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label small mb-1">Email</label>
