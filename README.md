@@ -1,6 +1,4 @@
-# Smart-ЖК MVP
-
-Готовый MVP-портал управления ЖК на Flask + SQLite + Bootstrap.
+MTK-портал управления ЖК на Flask + SQLite + Bootstrap.
 
 ## Что реализовано
 
@@ -60,8 +58,3 @@ python app.py
 - Комендант: `commandant@smartzhk.local` / `commandant123`
 - Жилец: `resident@smartzhk.local` / `resident123`
 
-## Важно для production
-
-- Замени `SECRET_KEY` в `app.py`
-- Переключись на PostgreSQL
-- Добавь HTTPS, резервное копирование и реальные платежные интеграции
