@@ -1141,6 +1141,14 @@ def toggle_expense_paid(expense_id):
 @role_required("komendant", "superadmin")
 def admin_invoices():
     invoices = Invoice.query.order_by(Invoice.created_at.desc()).all()
+    dirty = False
+    for inv in invoices:
+        expected = "odenilib" if float(inv.paid_amount or 0) >= float(inv.amount or 0) else "gozlemede"
+        if inv.status != expected:
+            inv.status = expected
+            dirty = True
+    if dirty:
+        db.session.commit()
     return render_template("admin_invoices.html", invoices=invoices)
 
 

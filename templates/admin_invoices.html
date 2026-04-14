@@ -13,6 +13,7 @@
                 {% for i in invoices %}
                     {% set credit = (i.apartment.credit_balance or 0) %}
                     {% set balance = (i.amount - i.paid_amount - credit) %}
+                    {% set computed_status = ('odenilib' if i.paid_amount >= i.amount else 'gozlemede') %}
                     <tr>
                         <td>{{ i.apartment.number }}</td>
                         <td>{{ i.period }}</td>
@@ -32,7 +33,7 @@
                                 <span class="text-muted">{{ 0|azn }}</span>
                             {% endif %}
                         </td>
-                        <td><span class="badge bg-{{ 'success' if i.status == 'odenilib' else 'warning' }}">{{ i.status }}</span></td>
+                        <td><span class="badge bg-{{ 'success' if computed_status == 'odenilib' else 'warning' }}">{{ computed_status }}</span></td>
                         <td style="min-width: 240px;">
                             <form method="post" action="{{ url_for('add_payment', invoice_id=i.id) }}" class="d-flex gap-2 flex-wrap">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
