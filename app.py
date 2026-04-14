@@ -474,6 +474,16 @@ def dashboard():
         invoices = Invoice.query.filter_by(apartment_id=apartment.id).order_by(Invoice.created_at.desc()).all() if apartment else []
         # For resident view we show both debt and credit (overpayment).
         debt = sum((i.amount - i.paid_amount) for i in invoices)
+        # Building-wide metrics (read-only for residents).
+        debt_expr = db.case((Invoice.amount - Invoice.paid_amount > 0, Invoice.amount - Invoice.paid_amount), else_=0.0)
+        house_total_debt = db.session.query(db.func.sum(debt_expr)).scalar() or 0
+        income_total = (
+            db.session.query(db.func.sum(Payment.amount)).filter(Payment.status == "confirmed").scalar() or 0
+        )
+        topup_total = db.session.query(db.func.sum(BalanceTopUp.amount)).scalar() or 0
+        expenses_total = db.session.query(db.func.sum(Expense.amount)).scalar() or 0
+        house_balance = round(float(income_total) + float(topup_total) - float(expenses_total), 2)
+        recent_expenses = Expense.query.order_by(Expense.created_at.desc()).limit(100).all()
         receipt_by_invoice = {}
         for i in invoices:
             confirmed = sorted([p for p in i.payments if p.status == "confirmed"], key=lambda x: x.created_at, reverse=True)
@@ -495,6 +505,9 @@ def dashboard():
             apartments=apartments,
             invoices=invoices,
             debt=round(debt, 2),
+            house_total_debt=round(float(house_total_debt or 0), 2),
+            house_balance=house_balance,
+            recent_expenses=recent_expenses,
             receipt_by_invoice=receipt_by_invoice,
             works=works,
             polls=polls,

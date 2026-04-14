@@ -49,6 +49,38 @@
     </div>
 </div>
 
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card metric-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="text-muted small">Ümumi balans (bina)</div>
+                <div class="h5 mb-0 {{ 'text-success' if house_balance >= 0 else 'text-danger' }}">{{ house_balance|azn }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card metric-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="text-muted small">Ümumi borc (bina)</div>
+                <div class="h5 mb-0 text-danger">{{ house_total_debt|azn }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card metric-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="text-muted small">Xərclər (son)</div>
+                {% if recent_expenses and recent_expenses[0] %}
+                    <div class="h6 mb-0 text-danger">{{ recent_expenses[0].amount|azn }}</div>
+                    <div class="small text-muted">{{ recent_expenses[0].name }}</div>
+                {% else %}
+                    <div class="h6 mb-0 text-muted">-</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <h5>Hesablarim</h5>
@@ -109,6 +141,32 @@
                 </tbody>
             </table>
         </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <h5>Xərclər tarixçəsi (bina)</h5>
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr><th>Tarix</th><th>Period</th><th>Ad</th><th class="text-end">Məbləğ</th></tr>
+                </thead>
+                <tbody>
+                    {% for e in recent_expenses %}
+                    <tr>
+                        <td class="text-muted small">{{ e.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                        <td class="text-muted small">{{ e.period }}</td>
+                        <td>{{ e.name }}</td>
+                        <td class="text-end text-danger fw-semibold">{{ e.amount|azn }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="text-muted">Xərc yoxdur.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="small text-muted">Bu məlumatlar yalnız baxış üçündür (dəyişmək mümkün deyil).</div>
     </div>
 </div>
 
