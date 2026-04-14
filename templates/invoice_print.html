@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-print-none d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Invoice</h3>
+    <button class="btn btn-outline-primary" onclick="window.print()">Cap et</button>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+            <div>
+                <div class="h4 mb-1">{{ system_name }}</div>
+                {% if cfg.house_address %}
+                <div class="text-muted">{{ cfg.house_address }}</div>
+                {% endif %}
+                {% if cfg.commandant_name or cfg.contact_phone %}
+                <div class="small text-muted mt-2">
+                    {% if cfg.commandant_name %}<div><strong>Komenndan:</strong> {{ cfg.commandant_name }}</div>{% endif %}
+                    {% if cfg.contact_phone %}<div><strong>Telefon:</strong> {{ cfg.contact_phone }}</div>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="text-end">
+                <div class="fw-semibold">Invoice #{{ invoice.id }}</div>
+                <div class="text-muted small">Tarix: {{ issue_date.strftime('%d.%m.%Y') }}</div>
+                <div class="text-muted small">Period: {{ invoice.period }}</div>
+            </div>
+        </div>
+
+        <hr class="my-3">
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="text-muted small">Musteri (Sakin)</div>
+                <div class="fw-semibold">{{ resident.full_name }}</div>
+                {% if resident.email %}<div class="small text-muted">{{ resident.email }}</div>{% endif %}
+                {% if resident.phone %}<div class="small text-muted">{{ resident.phone }}</div>{% endif %}
+            </div>
+            <div class="col-md-6">
+                <div class="text-muted small">Menzil</div>
+                <div class="fw-semibold">{{ invoice.apartment.number }}</div>
+                <div class="small text-muted">Sahe: {{ invoice.apartment.area }} м2</div>
+            </div>
+        </div>
+
+        <div class="table-responsive mt-4">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Tesvir</th>
+                        <th class="text-end">Mebleg</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Aylıq xidmət haqqı ({{ invoice.period }})</td>
+                        <td class="text-end">{{ invoice.amount|azn }}</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th class="text-end">Cemi</th>
+                        <th class="text-end">{{ invoice.amount|azn }}</th>
+                    </tr>
+                    <tr>
+                        <th class="text-end">Odenib</th>
+                        <th class="text-end">{{ invoice.paid_amount|azn }}</th>
+                    </tr>
+                    <tr>
+                        <th class="text-end">Borc / Kredit</th>
+                        <th class="text-end">
+                            {% if (invoice.amount - invoice.paid_amount) > 0 %}
+                                <span class="text-danger fw-semibold">{{ (invoice.amount - invoice.paid_amount)|azn }}</span>
+                            {% elif (invoice.amount - invoice.paid_amount) < 0 %}
+                                <span class="text-success fw-semibold">+{{ (invoice.paid_amount - invoice.amount)|azn }}</span>
+                            {% else %}
+                                <span class="text-muted">{{ 0|azn }}</span>
+                            {% endif %}
+                        </th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="small text-muted mt-3">
+            Bu sened informasiya xarakterlidir.
+        </div>
+    </div>
+</div>
+{% endblock %}

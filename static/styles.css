@@ -1,0 +1,45 @@
+body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main.container {
+    flex: 1;
+}
+
+.metric-card {
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--bs-tertiary-bg) 0%, var(--bs-secondary-bg) 100%);
+}
+
+.card {
+    border-radius: 16px;
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+}
+
+/* Dark theme: make card surfaces more distinct */
+[data-bs-theme="dark"] .card {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+[data-bs-theme="dark"] .card-body {
+    background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.06) 0%,
+        rgba(255, 255, 255, 0.03) 100%
+    );
+    border-radius: 16px;
+}
+
+.work-photo {
+    width: 110px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    cursor: zoom-in;
+}

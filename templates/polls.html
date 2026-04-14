@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Sorgular ve sesvermeler</h3>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard') }}">Geri</a>
+</div>
+
+{% if user.role in ['commandant', 'superadmin'] %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <h5>Yeni sorgu yarat</h5>
+        <form method="post" class="row g-2">
+            <input type="hidden" name="form_type" value="create_poll">
+            <div class="col-md-6"><input class="form-control" name="title" placeholder="Sual" required></div>
+            <div class="col-md-2 form-check d-flex align-items-center">
+                <input class="form-check-input me-2" type="checkbox" name="is_anonymous" checked>
+                <label class="form-check-label">Anonim</label>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" name="result_visibility" required>
+                    <option value="immediate">Neticeler derhal</option>
+                    <option value="after_vote">Ses verenden sonra</option>
+                    <option value="after_close">Baglandiqdan sonra</option>
+                </select>
+            </div>
+            <div class="col-md-2"><button class="btn btn-primary w-100">Yarat</button></div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% for row in poll_data %}
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <div class="fw-semibold">{{ row.poll.title }}</div>
+                <div class="small text-muted">
+                    {{ 'Anonim' if row.poll.is_anonymous else 'Aciq' }} |
+                    {% if row.poll.result_visibility == 'immediate' %}
+                        Neticeler derhal
+                    {% elif row.poll.result_visibility == 'after_vote' %}
+                        Neticeler sesden sonra
+                    {% else %}
+                        Neticeler baglandiqdan sonra
+                    {% endif %}
+                </div>
+            </div>
+            {% if row.can_view_results %}
+            <span class="badge bg-info">Да: {{ row.yes }} | Нет: {{ row.no }}</span>
+            {% else %}
+            <span class="badge bg-secondary">Neticeler gizlidir</span>
+            {% endif %}
+        </div>
+        {% if session.get('user_id') and row.poll.is_open %}
+            {% if not row.voted %}
+            <form method="post" class="d-flex gap-2 mt-2">
+                <input type="hidden" name="poll_id" value="{{ row.poll.id }}">
+                <button class="btn btn-success btn-sm" name="choice" value="yes">He</button>
+                <button class="btn btn-danger btn-sm" name="choice" value="no">Yox</button>
+            </form>
+            {% else %}
+            <div class="small text-success mt-2">Siz artiq ses vermisiniz.</div>
+            {% endif %}
+        {% elif row.voted %}
+            <div class="small text-success mt-2">Sizin seciminiz: {{ 'He' if row.user_choice == 'yes' else 'Yox' }}.</div>
+        {% endif %}
+
+        {% if user.role in ['commandant', 'superadmin'] %}
+        <form method="post" class="mt-2">
+            <input type="hidden" name="form_type" value="toggle_poll_status">
+            <input type="hidden" name="poll_id" value="{{ row.poll.id }}">
+            <button class="btn btn-sm {{ 'btn-outline-danger' if row.poll.is_open else 'btn-outline-success' }}">
+                {{ 'Sesvermeyi bagla' if row.poll.is_open else 'Sesvermeyi ac' }}
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% else %}
+<div class="text-muted">Sorgu yoxdur.</div>
+{% endfor %}
+{% endblock %}

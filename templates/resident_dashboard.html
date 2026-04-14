@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Sakin paneli</h3>
+    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('polls') }}">Sesvermeler</a>
+</div>
+{% if apartments %}
+<form method="post" action="{{ url_for('select_apartment') }}" class="mb-3 d-flex gap-2 align-items-center">
+    <label class="small text-muted mb-0">Menzil secimi:</label>
+    <select class="form-select form-select-sm w-auto" name="apartment_id" onchange="this.form.submit()">
+        {% for apt in apartments %}
+        <option value="{{ apt.id }}" {% if apartment and apt.id == apartment.id %}selected{% endif %}>{{ apt.number }}</option>
+        {% endfor %}
+    </select>
+</form>
+{% endif %}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card metric-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="text-muted small">Menzil</div>
+                <div class="h5 mb-0">{{ apartment.number if apartment else 'Teyin edilmeyib' }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card metric-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="text-muted small">Sahesi</div>
+                <div class="h5 mb-0">{{ apartment.area if apartment else 0 }} м2</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card metric-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="text-muted small">Cari borc</div>
+                <div class="h5 mb-0 text-danger">{{ debt|azn }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <h5>Hesablarim</h5>
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr><th>Period</th><th>Hesablanib</th><th>Odenib</th><th>Status</th><th>Qebz</th></tr>
+                </thead>
+                <tbody>
+                    {% for i in invoices %}
+                    <tr>
+                        <td>{{ i.period }}</td>
+                        <td>{{ i.amount|azn }}</td>
+                        <td>{{ i.paid_amount|azn }}</td>
+                        <td><span class="badge bg-{{ 'success' if i.status == 'odenilib' else 'warning' }}">{{ i.status }}</span></td>
+                        <td>
+                            {% if receipt_by_invoice.get(i.id) %}
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('resident_receipt', payment_id=receipt_by_invoice.get(i.id)) }}">Qebz</a>
+                            {% else %}
+                            <span class="text-muted small">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-muted">Hesab yoxdur.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="small text-muted">Odenis sistemde komendant ve ya administrator terefinden daxil edilir.</div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h5>Gorulen isler</h5>
+                {% for w in works %}
+                    <div class="border rounded p-2 mb-2">
+                        <div class="fw-semibold">{{ w.title }}</div>
+                        <div class="small text-muted">{{ w.description }}</div>
+                        {% if w.before_photo_url or w.after_photo_url %}
+                        <div class="d-flex gap-2 mt-2">
+                            {% if w.before_photo_url %}
+                            <img class="work-photo work-photo-expand" src="{{ w.before_photo_url }}" data-full-src="{{ w.before_photo_url }}" alt="Evvel">
+                            {% endif %}
+                            {% if w.after_photo_url %}
+                            <img class="work-photo work-photo-expand" src="{{ w.after_photo_url }}" data-full-src="{{ w.after_photo_url }}" alt="Sonra">
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="text-muted">Qeyd yoxdur.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h5>Aktiv sesvermeler</h5>
+                {% for p in polls %}
+                    <div class="d-flex justify-content-between border rounded p-2 mb-2">
+                        <div>{{ p.title }}</div>
+                        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('polls') }}">Ac</a>
+                    </div>
+                {% else %}
+                    <div class="text-muted">Sesverme yoxdur.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

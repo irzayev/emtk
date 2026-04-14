@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Xercler</h3>
+    <form method="get" class="d-flex gap-2 align-items-center">
+        <input class="form-control form-control-sm" name="period" value="{{ period }}" placeholder="YYYY-MM" style="max-width: 120px;">
+        <button class="btn btn-sm btn-outline-primary">Goster</button>
+    </form>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h5 class="mb-3">Statik (sablon) xercler</h5>
+                <form method="post" class="row g-2 mb-3">
+                    <input type="hidden" name="form_type" value="add_template">
+                    <div class="col-12">
+                        <label class="form-label">Ad</label>
+                        <input class="form-control" name="name" placeholder="Məs: Maaş, Elektrik, Su, Zibil" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Aylıq məbləğ</label>
+                        <input class="form-control" type="number" step="0.01" min="0" max="9999" name="default_amount" placeholder="0.00">
+                    </div>
+                    <div class="col-6 d-flex align-items-end">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="is_recurring" checked>
+                            <label class="form-check-label">Her ay</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <button class="btn btn-primary w-100">Elave et</button>
+                    </div>
+                </form>
+
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead><tr><th>Ad</th><th>Mebleg</th><th>Her ay</th><th>Status</th><th></th></tr></thead>
+                        <tbody>
+                        {% for t in templates %}
+                            <tr>
+                                <td>{{ t.name }}</td>
+                                <td>{{ (t.default_amount or 0)|azn }}</td>
+                                <td>{{ 'Beli' if t.is_recurring else 'Xeyr' }}</td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if t.is_active else 'secondary' }}">{{ 'Aktiv' if t.is_active else 'Passiv' }}</span>
+                                </td>
+                                <td class="text-end">
+                                    <form method="post" class="d-inline">
+                                        <input type="hidden" name="form_type" value="toggle_template">
+                                        <input type="hidden" name="template_id" value="{{ t.id }}">
+                                        <button class="btn btn-sm btn-outline-primary">{{ 'Deaktiv' if t.is_active else 'Aktiv et' }}</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% else %}
+                            <tr><td colspan="5" class="text-muted">Sablon yoxdur.</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="small text-muted">
+                    Qeyd: “Hesablari yarat” edildikde aktiv “Her ay” sablonlari cari ay ucun xerclere elave olunur.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="mb-0">Dinamik xercler ({{ period }})</h5>
+                    <div class="fw-semibold text-danger">Cemi: {{ expenses_total|azn }}</div>
+                </div>
+
+                <form method="post" class="row g-2 mb-3">
+                    <input type="hidden" name="form_type" value="add_expense">
+                    <div class="col-md-3">
+                        <label class="form-label">Period</label>
+                        <input class="form-control" name="period" value="{{ period }}" placeholder="YYYY-MM" required>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">Ad</label>
+                        <input class="form-control" name="name" placeholder="Məs: Elektrik (fakt), Su (fakt)" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Mebleg</label>
+                        <input class="form-control" type="number" step="0.01" min="0.01" max="9999" name="amount" required>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button class="btn btn-success w-100">Daxil</button>
+                    </div>
+                </form>
+
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead><tr><th>Tarix</th><th>Ad</th><th>Mebleg</th></tr></thead>
+                        <tbody>
+                        {% for e in expenses %}
+                            <tr>
+                                <td class="text-muted small">{{ e.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                                <td>{{ e.name }}</td>
+                                <td class="text-danger fw-semibold">{{ e.amount|azn }}</td>
+                            </tr>
+                        {% else %}
+                            <tr><td colspan="3" class="text-muted">Xerc yoxdur.</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="small text-muted">
+                    Bu xercler umumi balansdan cixilir (kvaritralara paylanmir).
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

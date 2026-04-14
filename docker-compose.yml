@@ -1,0 +1,9 @@
+services:
+  smart-zhk:
+    build: .
+    container_name: smart-zhk-mvp
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./instance:/app/instance
+      - ./static/uploads:/app/static/uploads

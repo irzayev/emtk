@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<h3 class="mb-3">Ayarlar</h3>
+<div class="card border-0 shadow-sm">
+    <div class="card-body">
+        <h5 class="mb-3">Sistem melumatlari</h5>
+        <form method="post" class="row g-2">
+            <input type="hidden" name="form_type" value="save_system">
+            <div class="col-md-12">
+                <label class="form-label">Evin unvani</label>
+                <input class="form-control" name="house_address" value="{{ cfg.house_address or '' }}" placeholder="Məs: Bakı, Nərimanov r., ...">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Komenndan adi</label>
+                <input class="form-control" name="commandant_name" value="{{ cfg.commandant_name or '' }}" placeholder="Ad Soyad">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Elaqe nomresi</label>
+                <input class="form-control" name="contact_phone" value="{{ cfg.contact_phone or '' }}" placeholder="+994...">
+            </div>
+            <div class="col-12">
+                <button class="btn btn-primary">Yadda saxla</button>
+            </div>
+        </form>
+        <hr>
+        <h5 class="mb-3">SMTP Ayarlari</h5>
+        <form method="post" class="row g-2">
+            <input type="hidden" name="form_type" value="save_smtp">
+            <div class="col-md-6"><label class="form-label">Host</label><input class="form-control" name="host" value="{{ cfg.host or '' }}"></div>
+            <div class="col-md-2"><label class="form-label">Port</label><input class="form-control" type="number" name="port" value="{{ cfg.port }}"></div>
+            <div class="col-md-4"><label class="form-label">Gonderen email</label><input class="form-control" name="sender_email" value="{{ cfg.sender_email or '' }}"></div>
+            <div class="col-md-6"><label class="form-label">Istifadeci adi</label><input class="form-control" name="username" value="{{ cfg.username or '' }}"></div>
+            <div class="col-md-6"><label class="form-label">Sifre</label><input class="form-control" type="password" name="password" value="{{ cfg.password or '' }}"></div>
+            <div class="col-12 form-check mt-2">
+                <input class="form-check-input" type="checkbox" name="use_tls" {% if cfg.use_tls %}checked{% endif %}>
+                <label class="form-check-label">TLS istifade et</label>
+            </div>
+            <div class="col-12">
+                <button class="btn btn-primary">Yadda saxla</button>
+            </div>
+        </form>
+        <hr>
+        <h6 class="mb-2">Test email gonder</h6>
+        <form method="post" class="row g-2">
+            <input type="hidden" name="form_type" value="test_email">
+            <div class="col-md-8"><input class="form-control" type="email" name="test_email" placeholder="test@example.com" required></div>
+            <div class="col-md-4"><button class="btn btn-outline-primary w-100">Test gonder</button></div>
+        </form>
+    </div>
+</div>
+{% endblock %}

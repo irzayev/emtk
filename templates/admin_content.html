@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Isler ve elanlar</h3>
+    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('polls') }}">Sorgular ve sesvermeler</a>
+</div>
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h5>Is elave et</h5>
+                <form method="post" enctype="multipart/form-data" class="vstack gap-2">
+                    <input type="hidden" name="form_type" value="work">
+                    <input class="form-control" name="title" placeholder="Basliq" required>
+                    <textarea class="form-control" name="description" placeholder="Tesvir" required></textarea>
+                    <label class="small text-muted">Evvel sekli (opsional)</label>
+                    <input class="form-control" type="file" name="before_photo_file" accept=".jpg,.jpeg,.png,.webp,.gif">
+                    <label class="small text-muted">Sonra sekli (opsional)</label>
+                    <input class="form-control" type="file" name="after_photo_file" accept=".jpg,.jpeg,.png,.webp,.gif">
+                    <button class="btn btn-primary">Yadda saxla</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h5>Elan elave et</h5>
+                <form method="post" class="vstack gap-2">
+                    <input type="hidden" name="form_type" value="announcement">
+                    <input class="form-control" name="title" placeholder="Basliq" required>
+                    <textarea class="form-control" name="text" placeholder="Metn" required></textarea>
+                    <button class="btn btn-primary">Paylas</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mt-1">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h5>Is jurnali</h5>
+                {% for w in works %}
+                <div class="border rounded p-2 mb-2">
+                    <div class="fw-semibold">{{ w.title }}</div>
+                    <div class="small text-muted">{{ w.description }}</div>
+                    {% if w.before_photo_url or w.after_photo_url %}
+                    <div class="d-flex gap-2 mt-2">
+                        {% if w.before_photo_url %}
+                        <img class="work-photo work-photo-expand" src="{{ w.before_photo_url }}" data-full-src="{{ w.before_photo_url }}" alt="Фото до">
+                        {% endif %}
+                        {% if w.after_photo_url %}
+                        <img class="work-photo work-photo-expand" src="{{ w.after_photo_url }}" data-full-src="{{ w.after_photo_url }}" alt="Фото после">
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    <div class="mt-2 d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-worklog-{{ w.id }}">Redakte et</button>
+                        <form method="post" action="{{ url_for('delete_worklog', worklog_id=w.id) }}" onsubmit="return confirm('Удалить работу?');">
+                            <button class="btn btn-sm btn-outline-danger">Sil</button>
+                        </form>
+                    </div>
+                    <div class="collapse mt-2" id="edit-worklog-{{ w.id }}">
+                        <form method="post" action="{{ url_for('update_worklog', worklog_id=w.id) }}" enctype="multipart/form-data" class="vstack gap-2">
+                            <input class="form-control" name="title" value="{{ w.title }}" required>
+                            <textarea class="form-control" name="description" required>{{ w.description }}</textarea>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="small text-muted">Evvel sekli (opsional)</label>
+                                    <input class="form-control" type="file" name="before_photo_file" accept=".jpg,.jpeg,.png,.webp,.gif">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="small text-muted">Sonra sekli (opsional)</label>
+                                    <input class="form-control" type="file" name="after_photo_file" accept=".jpg,.jpeg,.png,.webp,.gif">
+                                </div>
+                            </div>
+                            <button class="btn btn-primary btn-sm">Yadda saxla</button>
+                        </form>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-muted">Bosdur.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h5>Elanlar</h5>
+                {% for a in announcements %}
+                <div class="border rounded p-2 mb-2">
+                    <div class="fw-semibold">{{ a.title }}</div>
+                    <div class="small text-muted">{{ a.text }}</div>
+                    <div class="mt-2 d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-announcement-{{ a.id }}">Redakte et</button>
+                        <form method="post" action="{{ url_for('delete_announcement', announcement_id=a.id) }}" onsubmit="return confirm('Удалить объявление?');">
+                            <button class="btn btn-sm btn-outline-danger">Sil</button>
+                        </form>
+                    </div>
+                    <div class="collapse mt-2" id="edit-announcement-{{ a.id }}">
+                        <form method="post" action="{{ url_for('update_announcement', announcement_id=a.id) }}" class="vstack gap-2">
+                            <input class="form-control" name="title" value="{{ a.title }}" required>
+                            <textarea class="form-control" name="text" required>{{ a.text }}</textarea>
+                            <button class="btn btn-primary btn-sm">Yadda saxla</button>
+                        </form>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-muted">Bosdur.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
