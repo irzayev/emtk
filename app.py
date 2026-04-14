@@ -913,6 +913,7 @@ def admin_tariffs():
 def delete_tariff(tariff_id):
     tariff = Tariff.query.get_or_404(tariff_id)
     tariff_name = tariff.name
+    TariffApartment.query.filter_by(tariff_id=tariff.id).delete(synchronize_session=False)
     db.session.delete(tariff)
     db.session.commit()
     audit(f"Tarif silindi {tariff_name}")
