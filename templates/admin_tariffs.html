@@ -54,34 +54,36 @@
 
 <div class="card border-0 shadow-sm">
     <div class="card-body">
-        <table class="table">
-            <thead><tr><th>Ad</th><th>Tip</th><th>Məbləğ</th><th>Aktiv</th><th>Qapsam</th><th></th></tr></thead>
-            <tbody>
-            {% for t in tariffs %}
-                <tr>
-                    <td>{{ t.name }}</td>
-                    <td>{{ t.type }}</td>
-                    <td>{{ t.amount|azn }}</td>
-                    <td>{{ 'He' if t.is_active else 'Yox' }}</td>
-                    <td class="small text-muted">
-                        {% if scope_map.get(t.id) %}
-                            Secilmis ({{ scope_map.get(t.id)|length }})
-                        {% else %}
-                            Hamısı
-                        {% endif %}
-                    </td>
-                    <td class="text-end">
-                        <form method="post" action="{{ url_for('delete_tariff', tariff_id=t.id) }}" onsubmit="return confirm('Удалить тариф?');">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button class="btn btn-sm btn-outline-danger">Sil</button>
-                        </form>
-                    </td>
-                </tr>
-            {% else %}
-                <tr><td colspan="6" class="text-muted">Tarif yoxdur.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead><tr><th>Ad</th><th>Tip</th><th>Məbləğ</th><th>Aktiv</th><th>Qapsam</th><th></th></tr></thead>
+                <tbody>
+                {% for t in tariffs %}
+                    <tr>
+                        <td>{{ t.name }}</td>
+                        <td>{{ t.type }}</td>
+                        <td>{{ t.amount|azn }}</td>
+                        <td>{{ 'He' if t.is_active else 'Yox' }}</td>
+                        <td class="small text-muted">
+                            {% if scope_map.get(t.id) %}
+                                Secilmis ({{ scope_map.get(t.id)|length }})
+                            {% else %}
+                                Hamısı
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="{{ url_for('delete_tariff', tariff_id=t.id) }}" onsubmit="return confirm('Удалить тариф?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-outline-danger">Sil</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="6" class="text-muted">Tarif yoxdur.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
