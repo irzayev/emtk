@@ -7,7 +7,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-outline-primary">Email göndər</button>
         </form>
-        <button class="btn btn-outline-secondary" onclick="window.print()">Cap et</button>
+        <button class="btn btn-outline-secondary" onclick="window.print()">Çap et</button>
     </div>
 </div>
 
@@ -37,13 +37,13 @@
 
         <div class="row g-3">
             <div class="col-md-6">
-                <div class="text-muted small">Musteri (Sakin)</div>
+                <div class="text-muted small">Müştəri (Sakin)</div>
                 <div class="fw-semibold">{{ resident.full_name }}</div>
                 {% if resident.email %}<div class="small text-muted">{{ resident.email }}</div>{% endif %}
                 {% if resident.phone %}<div class="small text-muted">{{ resident.phone }}</div>{% endif %}
             </div>
             <div class="col-md-6">
-                <div class="text-muted small">Menzil</div>
+                <div class="text-muted small">Mənzil</div>
                 <div class="fw-semibold">{{ invoice.apartment.number }}</div>
                 <div class="small text-muted">Sahə: {{ invoice.apartment.area }} м2</div>
             </div>
@@ -53,7 +53,7 @@
             <table class="table">
                 <thead>
                     <tr>
-                        <th>Tesvir</th>
+                        <th>Təsvir</th>
                         <th class="text-end">Məbləğ</th>
                     </tr>
                 </thead>
@@ -65,7 +65,7 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <th class="text-end">Cemi</th>
+                        <th class="text-end">Cəmi</th>
                         <th class="text-end">{{ invoice.amount|azn }}</th>
                     </tr>
                     <tr>
@@ -89,7 +89,7 @@
         </div>
 
         <div class="small text-muted mt-3">
-            Bu sened informasiya xarakterlidir.
+            Bu sənəd informasiya xarakterlidir.
         </div>
     </div>
 </div>
