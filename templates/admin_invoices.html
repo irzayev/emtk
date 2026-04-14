@@ -32,11 +32,17 @@
                         </td>
                         <td><span class="badge bg-{{ 'success' if computed_status == 'odenilib' else 'warning' }}">{{ computed_status }}</span></td>
                         <td style="min-width: 240px;">
-                            <form method="post" action="{{ url_for('add_payment', invoice_id=i.id) }}" class="d-flex gap-2 flex-wrap">
+                            <form method="post" action="{{ url_for('add_payment', invoice_id=i.id) }}" class="row g-2 align-items-end">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input class="form-control form-control-sm" style="max-width: 140px;" type="number" step="0.01" min="-9999" max="9999" name="amount" placeholder="Məbləğ" required>
-                                <input class="form-control form-control-sm" style="min-width: 160px; max-width: 220px;" name="comment" placeholder="Qeyd (opsional)">
-                                <button class="btn btn-sm btn-success">Daxil</button>
+                                <div class="col-6 col-md-3">
+                                    <input class="form-control form-control-sm" type="number" step="0.01" min="-9999" max="9999" name="amount" placeholder="Məbləğ" required>
+                                </div>
+                                <div class="col-6 col-md-6">
+                                    <input class="form-control form-control-sm" name="comment" placeholder="Qeyd (opsional)">
+                                </div>
+                                <div class="col-12 col-md-3">
+                                    <button class="btn btn-sm btn-success w-100">Daxil</button>
+                                </div>
                             </form>
                         </td>
                         <td>
