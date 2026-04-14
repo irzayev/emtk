@@ -19,9 +19,9 @@
                         <span id="themeIcon">☀️</span>
                     </button>
                     {% if session.get('role') in ['komendant', 'superadmin'] %}
-                    <a class="btn btn-sm btn-outline-light" href="{{ url_for('admin_settings') }}">Ayarlar</a>
+                    <a class="btn btn-sm btn-outline-light" href="{{ url_for('admin_settings') }}">Tənzimləmələr</a>
                     {% endif %}
-                    <a class="btn btn-sm btn-outline-light" href="{{ url_for('logout') }}">Cixis</a>
+                    <a class="btn btn-sm btn-outline-light" href="{{ url_for('logout') }}">Çıxış</a>
                 </div>
             {% endif %}
         </div>
