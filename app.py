@@ -113,6 +113,7 @@ class SmtpConfig(db.Model):
     password = db.Column(db.String(255), nullable=True)
     sender_email = db.Column(db.String(120), nullable=True)
     use_tls = db.Column(db.Boolean, nullable=False, default=True)
+    system_name = db.Column(db.String(120), nullable=True)
     house_address = db.Column(db.String(255), nullable=True)
     commandant_name = db.Column(db.String(120), nullable=True)
     contact_phone = db.Column(db.String(50), nullable=True)
@@ -236,6 +237,8 @@ def ensure_system_schema():
     # Lightweight SQLite migration for already-created DB.
     with db.engine.connect() as conn:
         columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(smtp_config)")}
+        if "system_name" not in columns:
+            conn.exec_driver_sql("ALTER TABLE smtp_config ADD COLUMN system_name VARCHAR(120)")
         if "house_address" not in columns:
             conn.exec_driver_sql("ALTER TABLE smtp_config ADD COLUMN house_address VARCHAR(255)")
         if "commandant_name" not in columns:
@@ -329,6 +332,13 @@ def send_email(subject, body, recipients):
 def notify_residents(subject, body):
     recipients = [u.email for u in User.query.filter_by(role="resident").all() if u.email]
     return send_email(subject, body, recipients)
+
+
+@app.context_processor
+def inject_system_config():
+    cfg = get_smtp_config()
+    system_name = (cfg.system_name or "").strip() or "eMTK"
+    return {"system_name": system_name}
 
 
 def payment_status_label(status: str) -> str:
@@ -1190,12 +1200,14 @@ def admin_content():
             )
             audit("Is jurnalina qeyd elave edildi")
             flash("Is elave edildi.", "success")
-            notify_residents("eMTK: Yeni isler", f"Yeni is elave edildi: {request.form['title'].strip()}")
+            sysname = (get_smtp_config().system_name or "").strip() or "eMTK"
+            notify_residents(f"{sysname}: Yeni isler", f"Yeni is elave edildi: {request.form['title'].strip()}")
         else:
             db.session.add(Announcement(title=request.form["title"].strip(), text=request.form["text"].strip()))
             audit("Elan elave edildi")
             flash("Elan elave edildi.", "success")
-            notify_residents("eMTK: Yeni elan", f"Yeni elan: {request.form['title'].strip()}")
+            sysname = (get_smtp_config().system_name or "").strip() or "eMTK"
+            notify_residents(f"{sysname}: Yeni elan", f"Yeni elan: {request.form['title'].strip()}")
         db.session.commit()
         return redirect(url_for("admin_content", type=content_type))
 
@@ -1399,7 +1411,8 @@ def polls():
             db.session.commit()
             audit("Sorgu yaradildi")
             flash("Sorgu yaradildi.", "success")
-            notify_residents("eMTK: Yeni sorgu", f"Yeni sorgu yaradildi: {request.form['title'].strip()}")
+            sysname = (get_smtp_config().system_name or "").strip() or "eMTK"
+            notify_residents(f"{sysname}: Yeni sorgu", f"Yeni sorgu yaradildi: {request.form['title'].strip()}")
         elif user.role in ("komendant", "superadmin") and request.form["form_type"] == "toggle_poll_status":
             poll_id = int(request.form["poll_id"])
             poll = Poll.query.get_or_404(poll_id)
@@ -1454,7 +1467,7 @@ def send_invoice_email(invoice_id):
         flash("Sakinin email adresi yoxdur.", "warning")
         return redirect(url_for("admin_invoices"))
     cfg = get_smtp_config()
-    system_name = "eMTK"
+    system_name = (cfg.system_name or "").strip() or "eMTK"
     house_address = (cfg.house_address or "").strip()
     commandant_line = f"{cfg.commandant_name}".strip() if cfg.commandant_name else ""
     phone_line = f"{cfg.contact_phone}".strip() if cfg.contact_phone else ""
@@ -1504,7 +1517,7 @@ def print_invoice(invoice_id):
         invoice=invoice,
         resident=invoice.apartment.owner,
         cfg=cfg,
-        system_name="eMTK",
+        system_name=(cfg.system_name or "").strip() or "eMTK",
         debt=debt,
         issue_date=datetime.utcnow(),
     )
@@ -1518,6 +1531,7 @@ def admin_settings():
     if request.method == "POST":
         form_type = request.form.get("form_type", "save_smtp")
         if form_type == "save_system":
+            cfg.system_name = request.form.get("system_name", "").strip() or None
             cfg.house_address = request.form.get("house_address", "").strip() or None
             cfg.commandant_name = request.form.get("commandant_name", "").strip() or None
             cfg.contact_phone = request.form.get("contact_phone", "").strip() or None
@@ -1536,7 +1550,8 @@ def admin_settings():
             flash("SMTP ayarlari saxlanildi.", "success")
         elif form_type == "test_email":
             to_email = request.form.get("test_email", "").strip()
-            if send_email("eMTK SMTP test", "Bu test mesajidir.", [to_email]):
+            sysname = (cfg.system_name or "").strip() or "eMTK"
+            if send_email(f"{sysname} SMTP test", "Bu test mesajidir.", [to_email]):
                 flash("Test email ugurla gonderildi.", "success")
             else:
                 flash("Test email gonderilmedi. SMTP ayarlarini yoxlayin.", "danger")
