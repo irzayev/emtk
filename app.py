@@ -228,6 +228,49 @@ def _move_invoice_overpay_to_credit(invoice: "Invoice") -> float:
     return round(overflow, 2)
 
 
+def _apply_payment_delta(invoice: "Invoice", delta: float) -> dict:
+    """
+    Apply a payment delta to an invoice/apartment.
+    Positive delta increases paid; negative delta is a correction (decrease).
+    Returns dict with keys: applied_to_invoice, moved_to_credit, removed_from_credit.
+    """
+    apt = invoice.apartment
+    if not apt:
+        invoice.paid_amount = round(float(invoice.paid_amount or 0) + float(delta), 2)
+        invoice.paid_amount = max(0.0, invoice.paid_amount)
+        invoice.status = "odenilib" if float(invoice.paid_amount or 0) >= float(invoice.amount or 0) else "gozlemede"
+        return {"applied_to_invoice": round(delta, 2), "moved_to_credit": 0.0, "removed_from_credit": 0.0}
+
+    delta = float(delta or 0)
+    moved_to_credit = 0.0
+    removed_from_credit = 0.0
+
+    if delta >= 0:
+        invoice.paid_amount = round(float(invoice.paid_amount or 0) + delta, 2)
+        moved_to_credit = _move_invoice_overpay_to_credit(invoice)
+    else:
+        need = -delta
+        credit = float(apt.credit_balance or 0)
+        take_credit = min(credit, need)
+        if take_credit > 0:
+            apt.credit_balance = round(credit - take_credit, 2)
+            removed_from_credit = round(take_credit, 2)
+            need -= take_credit
+
+        if need > 0:
+            invoice.paid_amount = round(float(invoice.paid_amount or 0) - need, 2)
+            if invoice.paid_amount < 0:
+                invoice.paid_amount = 0.0
+        invoice.status = "odenilib" if float(invoice.paid_amount or 0) >= float(invoice.amount or 0) else "gozlemede"
+
+    applied_to_invoice = round(float(delta) + float(removed_from_credit) - float(moved_to_credit), 2)
+    return {
+        "applied_to_invoice": applied_to_invoice,
+        "moved_to_credit": round(float(moved_to_credit or 0), 2),
+        "removed_from_credit": round(float(removed_from_credit or 0), 2),
+    }
+
+
 def save_uploaded_image(file_storage):
     if not file_storage or not file_storage.filename:
         return None
@@ -1107,15 +1150,17 @@ def confirm_payment(payment_id):
 
     invoice = payment.invoice
     apply_amount = float(payment.amount)
-    invoice.paid_amount = round(invoice.paid_amount + apply_amount, 2)
-    invoice.status = "odenilib" if invoice.paid_amount >= invoice.amount else "gozlemede"
-    overflow = _move_invoice_overpay_to_credit(invoice)
+    result = _apply_payment_delta(invoice, apply_amount)
     payment.status = "confirmed"
     payment.reviewer_user_id = current_user().id
     payment.reviewed_at = datetime.utcnow()
     db.session.commit()
-    if overflow > 0:
-        audit(f"Odenis tesdiqlendi #{payment.id} {apply_amount:.2f} AZN (kredit +{overflow:.2f})")
+    moved = float(result.get("moved_to_credit") or 0)
+    removed = float(result.get("removed_from_credit") or 0)
+    if moved > 0:
+        audit(f"Odenis tesdiqlendi #{payment.id} {apply_amount:.2f} AZN (kredit +{moved:.2f})")
+    elif removed > 0:
+        audit(f"Odenis tesdiqlendi #{payment.id} {apply_amount:.2f} AZN (kredit -{removed:.2f})")
     else:
         audit(f"Odenis tesdiqlendi #{payment.id} {apply_amount:.2f} AZN")
     flash("Odenis tesdiqlendi.", "success")
@@ -1151,15 +1196,13 @@ def add_payment(invoice_id):
         return redirect(url_for("admin_invoices"))
     comment = (request.form.get("comment", "") or "").strip() or None
 
-    if amount <= 0:
-        flash("Məbləğ sıfırdan böyük olmalıdır.", "danger")
+    if amount == 0:
+        flash("Məbləğ sıfır ola bilməz.", "danger")
         return redirect(url_for("admin_invoices"))
 
     apply_amount = amount
     now = datetime.utcnow()
-    invoice.paid_amount = round(invoice.paid_amount + apply_amount, 2)
-    invoice.status = "odenilib" if invoice.paid_amount >= invoice.amount else "gozlemede"
-    overflow = _move_invoice_overpay_to_credit(invoice)
+    result = _apply_payment_delta(invoice, apply_amount)
     db.session.add(
         Payment(
             invoice_id=invoice.id,
@@ -1172,8 +1215,12 @@ def add_payment(invoice_id):
         )
     )
     db.session.commit()
-    if overflow > 0:
-        audit(f"Odenis daxil edildi invoice#{invoice.id} {apply_amount:.2f} AZN (kredit +{overflow:.2f})")
+    moved = float(result.get("moved_to_credit") or 0)
+    removed = float(result.get("removed_from_credit") or 0)
+    if moved > 0:
+        audit(f"Odenis daxil edildi invoice#{invoice.id} {apply_amount:.2f} AZN (kredit +{moved:.2f})")
+    elif removed > 0:
+        audit(f"Odenis daxil edildi invoice#{invoice.id} {apply_amount:.2f} AZN (kredit -{removed:.2f})")
     else:
         audit(f"Odenis daxil edildi invoice#{invoice.id} {apply_amount:.2f} AZN")
     flash("Odenis daxil edildi.", "success")
