@@ -118,9 +118,9 @@
             data: {
                 labels: {{ chart_labels|tojson }},
                 datasets: [
-                    { label: "Odenisler (AZN)", data: {{ chart_payments|tojson }}, borderColor: "#0d6efd", tension: 0.2 },
+                    { label: "Odenisler (AZN)", data: {{ chart_payments|tojson }}, borderColor: "#198754", tension: 0.2 },
                     { label: "Xərclər (AZN)", data: {{ chart_expenses|tojson }}, borderColor: "#dc3545", tension: 0.2 },
-                    { label: "Balans (AZN)", data: {{ chart_balance|tojson }}, borderColor: "#198754", tension: 0.2 }
+                    { label: "Balans (AZN)", data: {{ chart_balance|tojson }}, borderColor: "#0d6efd", tension: 0.2 }
                 ]
             }
         });
