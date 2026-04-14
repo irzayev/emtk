@@ -944,8 +944,16 @@ def admin_expenses():
     period = request.args.get("period") or date.today().strftime("%Y-%m")
     templates = ExpenseTemplate.query.order_by(ExpenseTemplate.is_active.desc(), ExpenseTemplate.name.asc()).all()
     expenses = Expense.query.filter_by(period=period).order_by(Expense.created_at.desc()).all()
+    template_expense_by_template_id = {e.template_id: e for e in expenses if e.template_id}
     total = round(sum(e.amount for e in expenses), 2)
-    return render_template("admin_expenses.html", templates=templates, expenses=expenses, period=period, expenses_total=total)
+    return render_template(
+        "admin_expenses.html",
+        templates=templates,
+        expenses=expenses,
+        period=period,
+        expenses_total=total,
+        template_expense_by_template_id=template_expense_by_template_id,
+    )
 
 
 @app.route("/admin/expenses/update/<int:expense_id>", methods=["POST"])

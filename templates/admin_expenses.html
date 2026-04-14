@@ -37,7 +37,7 @@
 
                 <div class="table-responsive">
                     <table class="table align-middle">
-                        <thead><tr><th>Ad</th><th>Məbləğ</th><th>Hər ay</th><th>Status</th><th></th></tr></thead>
+                        <thead><tr><th>Ad</th><th>Məbləğ</th><th>Hər ay</th><th>Status</th><th>Ödəniş ({{ period }})</th><th></th></tr></thead>
                         <tbody>
                         {% for t in templates %}
                             <tr>
@@ -47,7 +47,28 @@
                                 <td>
                                     <span class="badge bg-{{ 'success' if t.is_active else 'secondary' }}">{{ 'Aktiv' if t.is_active else 'Passiv' }}</span>
                                 </td>
+                                <td>
+                                    {% set ex = template_expense_by_template_id.get(t.id) %}
+                                    {% if ex %}
+                                        {% if ex.is_paid %}
+                                            <span class="badge bg-success">Ödənilib</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">Gözləmədə</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted small">-</span>
+                                    {% endif %}
+                                </td>
                                 <td class="text-end">
+                                    {% if template_expense_by_template_id.get(t.id) %}
+                                        {% set ex = template_expense_by_template_id.get(t.id) %}
+                                        <form method="post" action="{{ url_for('toggle_expense_paid', expense_id=ex.id) }}" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button class="btn btn-sm {% if ex.is_paid %}btn-outline-secondary{% else %}btn-outline-success{% endif %}">
+                                                {% if ex.is_paid %}Geri al{% else %}Ödəndi{% endif %}
+                                            </button>
+                                        </form>
+                                    {% endif %}
                                     <form method="post" class="d-inline">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="form_type" value="toggle_template">
@@ -57,7 +78,7 @@
                                 </td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="5" class="text-muted">Sablon yoxdur.</td></tr>
+                            <tr><td colspan="6" class="text-muted">Sablon yoxdur.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
