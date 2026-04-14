@@ -529,10 +529,10 @@ def balance_topup():
     try:
         amount = float(request.form.get("amount", "0") or 0)
     except (TypeError, ValueError):
-        flash("Mebleg duzgun deyil.", "danger")
+        flash("Məbləğ düzgün deyil.", "danger")
         return redirect(url_for("dashboard"))
     if amount <= 0:
-        flash("Mebleg sifirdan boyuk olmalidir.", "danger")
+        flash("Məbləğ sıfırdan böyük olmalıdır.", "danger")
         return redirect(url_for("dashboard"))
     comment = (request.form.get("comment", "") or "").strip() or None
     db.session.add(BalanceTopUp(amount=round(amount, 2), comment=comment, created_by_user_id=current_user().id))
@@ -798,7 +798,7 @@ def admin_expenses():
                 flash("Ad bos ola bilmez.", "danger")
                 return redirect(url_for("admin_expenses"))
             if amount <= 0:
-                flash("Mebleg sifirdan boyuk olmalidir.", "danger")
+                flash("Məbləğ sıfırdan böyük olmalıdır.", "danger")
                 return redirect(url_for("admin_expenses"))
             db.session.add(Expense(period=period, name=name, amount=round(amount, 2), created_by_user_id=current_user().id))
             db.session.commit()
@@ -868,11 +868,11 @@ def add_payment(invoice_id):
     try:
         amount = float(request.form["amount"])
     except (TypeError, ValueError):
-        flash("Mebleg duzgun deyil.", "danger")
+        flash("Məbləğ düzgün deyil.", "danger")
         return redirect(url_for("admin_invoices"))
 
     if amount <= 0:
-        flash("Mebleg sifirdan boyuk olmalidir.", "danger")
+        flash("Məbləğ sıfırdan böyük olmalıdır.", "danger")
         return redirect(url_for("admin_invoices"))
 
     apply_amount = amount
@@ -1079,7 +1079,7 @@ def send_invoice_email(invoice_id):
     header = f"{system_name}"
     if house_address:
         header += f" | {house_address}"
-    subject = f"{system_name} - Invoice {invoice.period} - {invoice.apartment.number}"
+    subject = f"{system_name} - Hesab-faktura {invoice.period} - {invoice.apartment.number}"
     debt_raw = round(invoice.amount - invoice.paid_amount, 2)
     debt = max(0.0, debt_raw)
     credit = max(0.0, -debt_raw)
@@ -1090,8 +1090,8 @@ def send_invoice_email(invoice_id):
         f"Menzil: {invoice.apartment.number}",
         f"Period: {invoice.period}",
         "",
-        f"Hesablanib: {invoice.amount:.2f} AZN",
-        f"Odenib: {invoice.paid_amount:.2f} AZN",
+        f"Hesablanıb: {invoice.amount:.2f} AZN",
+        f"Ödənilib: {invoice.paid_amount:.2f} AZN",
         f"Borc: {debt:.2f} AZN",
         f"Kredit: {credit:.2f} AZN",
         f"Status: {invoice.status}",
@@ -1099,12 +1099,12 @@ def send_invoice_email(invoice_id):
     if commandant_line or phone_line:
         body_lines += ["", "Elaqe:"]
         if commandant_line:
-            body_lines.append(f"Komenndan: {commandant_line}")
+        body_lines.append(f"Komendant: {commandant_line}")
         if phone_line:
             body_lines.append(f"Telefon: {phone_line}")
     body = "\n".join(body_lines) + "\n"
     if send_email(subject, body, [resident.email]):
-        flash("Invoice email ile gonderildi.", "success")
+        flash("Hesab-faktura email ilə göndərildi.", "success")
     else:
         flash("Email gonderilemedi. SMTP ayarlarini yoxlayin.", "danger")
     return redirect(url_for("admin_invoices"))

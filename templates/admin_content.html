@@ -1,21 +1,21 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0">Isler ve elanlar</h3>
-    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('polls') }}">Sorgular ve sesvermeler</a>
+    <h3 class="mb-0">İşlər və elanlar</h3>
+    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('polls') }}">Sorğular və səsvermələr</a>
 </div>
 <div class="row g-3">
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm">
             <div class="card-body">
-                <h5>Is elave et</h5>
+                <h5>İş əlavə et</h5>
                 <form method="post" enctype="multipart/form-data" class="vstack gap-2">
                     <input type="hidden" name="form_type" value="work">
                     <input class="form-control" name="title" placeholder="Basliq" required>
                     <textarea class="form-control" name="description" placeholder="Tesvir" required></textarea>
-                    <label class="small text-muted">Evvel sekli (opsional)</label>
+                    <label class="small text-muted">Əvvəlki foto (opsional)</label>
                     <input class="form-control" type="file" name="before_photo_file" accept=".jpg,.jpeg,.png,.webp,.gif">
-                    <label class="small text-muted">Sonra sekli (opsional)</label>
+                    <label class="small text-muted">Sonrakı foto (opsional)</label>
                     <input class="form-control" type="file" name="after_photo_file" accept=".jpg,.jpeg,.png,.webp,.gif">
                     <button class="btn btn-primary">Yadda saxla</button>
                 </form>
@@ -25,7 +25,7 @@
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm">
             <div class="card-body">
-                <h5>Elan elave et</h5>
+                <h5>Elan əlavə et</h5>
                 <form method="post" class="vstack gap-2">
                     <input type="hidden" name="form_type" value="announcement">
                     <input class="form-control" name="title" placeholder="Basliq" required>
@@ -41,7 +41,7 @@
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm">
             <div class="card-body">
-                <h5>Is jurnali</h5>
+                <h5>İş jurnalı</h5>
                 {% for w in works %}
                 <div class="border rounded p-2 mb-2">
                     <div class="fw-semibold">{{ w.title }}</div>
@@ -68,11 +68,11 @@
                             <textarea class="form-control" name="description" required>{{ w.description }}</textarea>
                             <div class="row g-2">
                                 <div class="col-md-6">
-                                    <label class="small text-muted">Evvel sekli (opsional)</label>
+                                    <label class="small text-muted">Əvvəlki foto (opsional)</label>
                                     <input class="form-control" type="file" name="before_photo_file" accept=".jpg,.jpeg,.png,.webp,.gif">
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="small text-muted">Sonra sekli (opsional)</label>
+                                    <label class="small text-muted">Sonrakı foto (opsional)</label>
                                     <input class="form-control" type="file" name="after_photo_file" accept=".jpg,.jpeg,.png,.webp,.gif">
                                 </div>
                             </div>

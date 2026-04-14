@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3>Sorgular ve sesvermeler</h3>
+    <h3>Sorğular və səsvermələr</h3>
     <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard') }}">Geri</a>
 </div>
 
 {% if user.role in ['commandant', 'superadmin'] %}
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
-        <h5>Yeni sorgu yarat</h5>
+        <h5>Yeni sorğu yarat</h5>
         <form method="post" class="row g-2">
             <input type="hidden" name="form_type" value="create_poll">
             <div class="col-md-6"><input class="form-control" name="title" placeholder="Sual" required></div>
@@ -18,9 +18,9 @@
             </div>
             <div class="col-md-2">
                 <select class="form-select" name="result_visibility" required>
-                    <option value="immediate">Neticeler derhal</option>
-                    <option value="after_vote">Ses verenden sonra</option>
-                    <option value="after_close">Baglandiqdan sonra</option>
+                    <option value="immediate">Nəticələr dərhal</option>
+                    <option value="after_vote">Səs verdikdən sonra</option>
+                    <option value="after_close">Bağlandıqdan sonra</option>
                 </select>
             </div>
             <div class="col-md-2"><button class="btn btn-primary w-100">Yarat</button></div>
@@ -38,7 +38,7 @@
                 <div class="small text-muted">
                     {{ 'Anonim' if row.poll.is_anonymous else 'Aciq' }} |
                     {% if row.poll.result_visibility == 'immediate' %}
-                        Neticeler derhal
+                        Nəticələr dərhal
                     {% elif row.poll.result_visibility == 'after_vote' %}
                         Neticeler sesden sonra
                     {% else %}
@@ -49,7 +49,7 @@
             {% if row.can_view_results %}
             <span class="badge bg-info">Да: {{ row.yes }} | Нет: {{ row.no }}</span>
             {% else %}
-            <span class="badge bg-secondary">Neticeler gizlidir</span>
+                    <span class="badge bg-secondary">Neticeler gizlidir</span>
             {% endif %}
         </div>
         {% if session.get('user_id') and row.poll.is_open %}
@@ -78,6 +78,6 @@
     </div>
 </div>
 {% else %}
-<div class="text-muted">Sorgu yoxdur.</div>
+<div class="text-muted">Sorğu yoxdur.</div>
 {% endfor %}
 {% endblock %}

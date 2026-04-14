@@ -24,7 +24,7 @@
         <h5 class="mb-2">Balans artirma</h5>
         <form method="post" action="{{ url_for('balance_topup') }}" class="row g-2 align-items-end">
             <div class="col-md-2">
-                <label class="form-label">Mebleg</label>
+                <label class="form-label">Məbləğ</label>
                 <input class="form-control" type="number" step="0.01" min="0.01" max="9999" name="amount" required>
             </div>
             <div class="col-md-8">
@@ -40,16 +40,16 @@
 </div>
 
 <div class="d-flex flex-wrap gap-2 mb-3">
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin_apartments') }}">Menziller</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin_tariffs') }}">Tarifler</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin_apartments') }}">Mənzillər</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin_tariffs') }}">Tariflər</a>
     <a class="btn btn-outline-secondary" href="{{ url_for('admin_invoices') }}">Hesablar</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin_expenses') }}">Xercler</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin_content') }}">Isler ve elanlar</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin_expenses') }}">Xərclər</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin_content') }}">İşlər və elanlar</a>
 </div>
 
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
-        <h5>Odenis / Xercler / Balans</h5>
+        <h5>Odenis / Xərclər / Balans</h5>
         <canvas id="paymentsChart" height="90"></canvas>
     </div>
 </div>
@@ -59,7 +59,7 @@
         <h5>Odenis cedveli</h5>
         <div class="table-responsive">
             <table class="table">
-                <thead><tr><th>Menzil</th><th>Period</th><th>Mebleg</th><th>Tarix</th></tr></thead>
+                <thead><tr><th>Menzil</th><th>Period</th><th>Məbləğ</th><th>Tarix</th></tr></thead>
                 <tbody>
                     {% for r in payment_table %}
                     <tr><td>{{ r.apartment }}</td><td>{{ r.period }}</td><td>{{ r.amount|azn }}</td><td>{{ r.date }}</td></tr>
@@ -113,7 +113,7 @@
                 labels: {{ chart_labels|tojson }},
                 datasets: [
                     { label: "Odenisler (AZN)", data: {{ chart_payments|tojson }}, borderColor: "#0d6efd", tension: 0.2 },
-                    { label: "Xercler (AZN)", data: {{ chart_expenses|tojson }}, borderColor: "#dc3545", tension: 0.2 },
+                    { label: "Xərclər (AZN)", data: {{ chart_expenses|tojson }}, borderColor: "#dc3545", tension: 0.2 },
                     { label: "Balans (AZN)", data: {{ chart_balance|tojson }}, borderColor: "#198754", tension: 0.2 }
                 ]
             }

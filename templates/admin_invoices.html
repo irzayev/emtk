@@ -2,13 +2,13 @@
 {% block content %}
 <div class="d-flex justify-content-between mb-3">
     <h3>Hesablar</h3>
-    <a class="btn btn-primary btn-sm" href="{{ url_for('generate_invoices') }}">Cari ay ucun yarat</a>
+    <a class="btn btn-primary btn-sm" href="{{ url_for('generate_invoices') }}">Cari ay üçün yarat</a>
 </div>
 <div class="card border-0 shadow-sm">
     <div class="card-body">
         <div class="table-responsive">
             <table class="table">
-                <thead><tr><th>Menzil</th><th>Period</th><th>Hesablanib</th><th>Odenib</th><th>Borc</th><th>Status</th><th>Odenis daxil et</th><th>Invoice</th><th>Email</th></tr></thead>
+                <thead><tr><th>Menzil</th><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Borc</th><th>Status</th><th>Ödəniş daxil et</th><th>Hesab-faktura</th><th>Email</th></tr></thead>
                 <tbody>
                 {% for i in invoices %}
                     {% set debt = (i.amount - i.paid_amount) %}
@@ -30,7 +30,7 @@
                         <td style="min-width: 240px;">
                             {% if i.status != 'odenilib' %}
                             <form method="post" action="{{ url_for('add_payment', invoice_id=i.id) }}" class="d-flex gap-2">
-                                <input class="form-control form-control-sm" style="max-width: 140px;" type="number" step="0.01" min="0.01" max="9999" name="amount" placeholder="Mebleg" required>
+                                <input class="form-control form-control-sm" style="max-width: 140px;" type="number" step="0.01" min="0.01" max="9999" name="amount" placeholder="Məbləğ" required>
                                 <button class="btn btn-sm btn-success">Daxil</button>
                             </form>
                             {% else %}

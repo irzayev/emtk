@@ -6,7 +6,7 @@
         <p class="mb-1"><strong>Qebz ID:</strong> {{ payment.id }}</p>
         <p class="mb-1"><strong>Menzil:</strong> {{ payment.invoice.apartment.number }}</p>
         <p class="mb-1"><strong>Period:</strong> {{ payment.invoice.period }}</p>
-        <p class="mb-1"><strong>Mebleg:</strong> {{ payment.amount|azn }}</p>
+        <p class="mb-1"><strong>Məbləğ:</strong> {{ payment.amount|azn }}</p>
         <p class="mb-1"><strong>Status:</strong> {{ payment.status }}</p>
         <p class="mb-3"><strong>Tarix:</strong> {{ payment.created_at.strftime('%d.%m.%Y %H:%M') }}</p>
         <button class="btn btn-outline-primary" onclick="window.print()">Cap et</button>

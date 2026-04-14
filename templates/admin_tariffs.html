@@ -1,32 +1,32 @@
 {% extends "base.html" %}
 {% block content %}
-<h3 class="mb-3">Tarifler</h3>
+<h3 class="mb-3">Tariflər</h3>
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="post" class="row g-2">
             <div class="col-md-4"><input class="form-control" name="name" placeholder="Ad" required></div>
             <div class="col-md-3">
                 <select class="form-select" name="type" required>
-                    <option value="per_m2">Deyisen (m2 uzre)</option>
+                    <option value="per_m2">Dəyişən (m2 uzre)</option>
                     <option value="fixed">Sabit</option>
                 </select>
             </div>
-            <div class="col-md-3"><input class="form-control" name="amount" type="number" step="0.01" placeholder="Mebleg (AZN)" required></div>
+            <div class="col-md-3"><input class="form-control" name="amount" type="number" step="0.01" placeholder="Məbləğ (AZN)" required></div>
             <div class="col-md-2 d-flex align-items-center gap-2">
                 <div class="form-check mt-1">
                     <input class="form-check-input" type="checkbox" name="apply_all" id="apply_all" checked>
-                    <label class="form-check-label small" for="apply_all">Hamisi</label>
+                    <label class="form-check-label small" for="apply_all">Hamısı</label>
                 </div>
                 <button class="btn btn-primary w-100">Elave et</button>
             </div>
             <div class="col-12">
-                <label class="small text-muted">Menziller (Hamisi secilmeyibse)</label>
+                <label class="small text-muted">Menziller (Hamısı secilmeyibse)</label>
                 <select class="form-select" name="apartment_ids" id="apartment_ids" multiple>
                     {% for a in apartments %}
                     <option value="{{ a.id }}">{{ a.number }}</option>
                     {% endfor %}
                 </select>
-                <div class="small text-muted mt-1">Qeyd: “Hamisi” secilibse, menzil secimi nezere alinmir.</div>
+                <div class="small text-muted mt-1">Qeyd: “Hamısı” secilibse, menzil secimi nezere alinmir.</div>
             </div>
         </form>
     </div>
@@ -34,17 +34,17 @@
 
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
-        <h5 class="mb-2">Yeniden hesabla</h5>
+        <h5 class="mb-2">Yenidən hesabla</h5>
         <form method="post" action="{{ url_for('recalculate_invoices') }}" class="row g-2 align-items-end">
             <div class="col-md-3">
                 <label class="form-label">Period (YYYY-MM)</label>
                 <input class="form-control" name="period" placeholder="2026-04" required>
             </div>
             <div class="col-md-3">
-                <button class="btn btn-success w-100">Yeniden hesabla</button>
+                <button class="btn btn-success w-100">Yenidən hesabla</button>
             </div>
             <div class="col-md-6 small text-muted">
-                Tarif deyisenden sonra bu duymeni basin ki, secilmis period uzre hesablar yeniden hesablanib yenilensin.
+                Tarif dəyişdikdən sonra seçilmiş dövr üzrə hesabların yenidən hesablanması üçün bu düyməyə basın.
             </div>
         </form>
     </div>
@@ -53,7 +53,7 @@
 <div class="card border-0 shadow-sm">
     <div class="card-body">
         <table class="table">
-            <thead><tr><th>Ad</th><th>Tip</th><th>Mebleg</th><th>Aktiv</th><th>Qapsam</th><th></th></tr></thead>
+            <thead><tr><th>Ad</th><th>Tip</th><th>Məbləğ</th><th>Aktiv</th><th>Qapsam</th><th></th></tr></thead>
             <tbody>
             {% for t in tariffs %}
                 <tr>
@@ -65,7 +65,7 @@
                         {% if scope_map.get(t.id) %}
                             Secilmis ({{ scope_map.get(t.id)|length }})
                         {% else %}
-                            Hamisi
+                            Hamısı
                         {% endif %}
                     </td>
                     <td class="text-end">

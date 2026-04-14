@@ -3,15 +3,15 @@
 <h3 class="mb-3">Ayarlar</h3>
 <div class="card border-0 shadow-sm">
     <div class="card-body">
-        <h5 class="mb-3">Sistem melumatlari</h5>
+        <h5 class="mb-3">Sistem məlumatları</h5>
         <form method="post" class="row g-2">
             <input type="hidden" name="form_type" value="save_system">
             <div class="col-md-12">
-                <label class="form-label">Evin unvani</label>
+                <label class="form-label">Evin ünvanı</label>
                 <input class="form-control" name="house_address" value="{{ cfg.house_address or '' }}" placeholder="Məs: Bakı, Nərimanov r., ...">
             </div>
             <div class="col-md-6">
-                <label class="form-label">Komenndan adi</label>
+                <label class="form-label">Komendant adi</label>
                 <input class="form-control" name="commandant_name" value="{{ cfg.commandant_name or '' }}" placeholder="Ad Soyad">
             </div>
             <div class="col-md-6">
@@ -40,7 +40,7 @@
             </div>
         </form>
         <hr>
-        <h6 class="mb-2">Test email gonder</h6>
+        <h6 class="mb-2">Test e-poçtu göndər</h6>
         <form method="post" class="row g-2">
             <input type="hidden" name="form_type" value="test_email">
             <div class="col-md-8"><input class="form-control" type="email" name="test_email" placeholder="test@example.com" required></div>
