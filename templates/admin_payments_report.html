@@ -17,6 +17,15 @@
                 <input class="form-control js-monthpicker" name="to_period" value="{{ to_period }}" placeholder="2026-04" required>
             </div>
             <div class="col-md-3">
+                <label class="form-label">Mənzil</label>
+                <select class="form-select" name="apartment_id">
+                    <option value="">Hamısı</option>
+                    {% for a in apartments_all %}
+                        <option value="{{ a.id }}" {% if apartment_id and a.id == apartment_id %}selected{% endif %}>{{ a.number }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
                 <button class="btn btn-primary w-100">Goster</button>
             </div>
         </form>

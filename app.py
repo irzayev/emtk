@@ -1327,6 +1327,8 @@ def admin_payments_report():
 
     from_period = (request.args.get("from_period") or default_from).strip()
     to_period = (request.args.get("to_period") or default_to).strip()
+    apartment_id_raw = (request.args.get("apartment_id") or "").strip()
+    apartment_id = int(apartment_id_raw) if apartment_id_raw.isdigit() else None
     if len(from_period) != 7 or len(to_period) != 7:
         flash("Period duzgun deyil (YYYY-MM).", "danger")
         return redirect(url_for("dashboard"))
@@ -1336,15 +1338,20 @@ def admin_payments_report():
         periods = periods[-24:]
         from_period = periods[0]
 
-    apartments = Apartment.query.order_by(Apartment.number).all()
-    sums = (
+    apartments_query = Apartment.query.order_by(Apartment.number)
+    if apartment_id:
+        apartments_query = apartments_query.filter(Apartment.id == apartment_id)
+    apartments = apartments_query.all()
+
+    sums_query = (
         db.session.query(Apartment.id, Invoice.period, db.func.sum(Payment.amount))
         .join(Invoice, Invoice.apartment_id == Apartment.id)
         .join(Payment, Payment.invoice_id == Invoice.id)
         .filter(Payment.status == "confirmed", Invoice.period >= from_period, Invoice.period <= to_period)
-        .group_by(Apartment.id, Invoice.period)
-        .all()
     )
+    if apartment_id:
+        sums_query = sums_query.filter(Apartment.id == apartment_id)
+    sums = sums_query.group_by(Apartment.id, Invoice.period).all()
     amount_by_apt_period = {(apt_id, period): float(total or 0) for apt_id, period, total in sums}
 
     rows = []
@@ -1366,6 +1373,8 @@ def admin_payments_report():
         "admin_payments_report.html",
         from_period=from_period,
         to_period=to_period,
+        apartment_id=apartment_id,
+        apartments_all=Apartment.query.order_by(Apartment.number).all(),
         periods=periods,
         rows=rows,
         col_totals=col_totals,
