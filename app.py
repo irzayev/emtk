@@ -1099,7 +1099,7 @@ def send_invoice_email(invoice_id):
     if commandant_line or phone_line:
         body_lines += ["", "Elaqe:"]
         if commandant_line:
-        body_lines.append(f"Komendant: {commandant_line}")
+            body_lines.append(f"Komendant: {commandant_line}")
         if phone_line:
             body_lines.append(f"Telefon: {phone_line}")
     body = "\n".join(body_lines) + "\n"
