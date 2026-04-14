@@ -99,14 +99,27 @@
 
                 <div class="table-responsive">
                     <table class="table">
-                        <thead><tr><th>Tarix</th><th>Ad</th><th>Məbləğ</th><th></th></tr></thead>
+                        <thead><tr><th>Tarix</th><th>Ad</th><th>Məbləğ</th><th>Status</th><th></th></tr></thead>
                         <tbody>
                         {% for e in expenses %}
                             <tr>
                                 <td class="text-muted small">{{ e.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
                                 <td>{{ e.name }}</td>
                                 <td class="text-danger fw-semibold">{{ e.amount|azn }}</td>
+                                <td>
+                                    {% if e.is_paid %}
+                                        <span class="badge bg-success">Ödənilib</span>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">Gözləmədə</span>
+                                    {% endif %}
+                                </td>
                                 <td class="text-end">
+                                    <form method="post" action="{{ url_for('toggle_expense_paid', expense_id=e.id) }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button class="btn btn-sm {% if e.is_paid %}btn-outline-secondary{% else %}btn-outline-success{% endif %}">
+                                            {% if e.is_paid %}Geri al{% else %}Ödəndi{% endif %}
+                                        </button>
+                                    </form>
                                     <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-expense-{{ e.id }}">Redaktə et</button>
                                     <form method="post" action="{{ url_for('delete_expense', expense_id=e.id) }}" class="d-inline" onsubmit="return confirm('Xərc silinsin?');">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -115,7 +128,7 @@
                                 </td>
                             </tr>
                             <tr class="collapse" id="edit-expense-{{ e.id }}">
-                                <td colspan="4" class="bg-light">
+                                <td colspan="5" class="bg-light">
                                     <form method="post" action="{{ url_for('update_expense', expense_id=e.id) }}" class="row g-2 align-items-end">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <div class="col-md-3">
@@ -137,7 +150,7 @@
                                 </td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="4" class="text-muted">Xerc yoxdur.</td></tr>
+                            <tr><td colspan="5" class="text-muted">Xerc yoxdur.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>

@@ -172,6 +172,8 @@ class Expense(db.Model):
     period = db.Column(db.String(7), nullable=False)  # YYYY-MM
     name = db.Column(db.String(120), nullable=False)
     amount = db.Column(db.Float, nullable=False)
+    is_paid = db.Column(db.Boolean, nullable=False, default=False)
+    paid_at = db.Column(db.DateTime, nullable=True)
     template_id = db.Column(db.Integer, db.ForeignKey("expense_template.id"), nullable=True)
     template = db.relationship("ExpenseTemplate", backref="expenses")
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
@@ -273,6 +275,16 @@ def ensure_expense_schema():
         tables = {row[0] for row in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'")}
         if "expense_template" not in tables or "expense" not in tables:
             db.create_all()
+            return
+
+        columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(expense)")}
+        if "is_paid" not in columns:
+            conn.exec_driver_sql("ALTER TABLE expense ADD COLUMN is_paid BOOLEAN NOT NULL DEFAULT 1")
+        if "paid_at" not in columns:
+            conn.exec_driver_sql("ALTER TABLE expense ADD COLUMN paid_at DATETIME")
+
+        # New rows should default to unpaid; keep legacy rows paid.
+        conn.exec_driver_sql("UPDATE expense SET is_paid=0 WHERE is_paid IS NULL")
 
 def ensure_balance_schema():
     with db.engine.connect() as conn:
@@ -491,9 +503,11 @@ def dashboard():
             db.session.query(db.func.sum(Payment.amount)).filter(Payment.status == "confirmed").scalar() or 0
         )
         topup_total = db.session.query(db.func.sum(BalanceTopUp.amount)).scalar() or 0
-        expenses_total = db.session.query(db.func.sum(Expense.amount)).scalar() or 0
-        house_balance = round(float(income_total) + float(topup_total) - float(expenses_total), 2)
-        unpaid_expenses = max(0.0, round(float(expenses_total) - (float(income_total) + float(topup_total)), 2))
+        paid_expenses_total = (
+            db.session.query(db.func.sum(Expense.amount)).filter(Expense.is_paid == True).scalar() or 0
+        )
+        unpaid_expenses = db.session.query(db.func.sum(Expense.amount)).filter(Expense.is_paid == False).scalar() or 0
+        house_balance = round(float(income_total) + float(topup_total) - float(paid_expenses_total), 2)
         recent_expenses = Expense.query.order_by(Expense.created_at.desc()).limit(100).all()
         receipt_by_invoice = {}
         for i in invoices:
@@ -562,7 +576,13 @@ def dashboard():
     for d, v in topups_by_day.items():
         payments_by_day[d] = payments_by_day.get(d, 0) + float(v)
 
-    period_expenses = Expense.query.filter(Expense.created_at >= from_dt, Expense.created_at <= to_dt).order_by(Expense.created_at.asc()).all()
+    period_expenses = (
+        Expense.query.filter(
+            Expense.created_at >= from_dt, Expense.created_at <= to_dt, Expense.is_paid == True
+        )
+        .order_by(Expense.created_at.asc())
+        .all()
+    )
     expenses_by_day = {}
     for e in period_expenses:
         key = e.created_at.strftime("%Y-%m-%d")
@@ -589,7 +609,9 @@ def dashboard():
 
     income_total = db.session.query(db.func.sum(Payment.amount)).filter(Payment.status == "confirmed").scalar() or 0
     topup_total = db.session.query(db.func.sum(BalanceTopUp.amount)).scalar() or 0
-    expenses_total = db.session.query(db.func.sum(Expense.amount)).scalar() or 0
+    paid_expenses_total = (
+        db.session.query(db.func.sum(Expense.amount)).filter(Expense.is_paid == True).scalar() or 0
+    )
     income_period = (
         db.session.query(db.func.sum(Payment.amount))
         .filter(Payment.status == "confirmed", Payment.created_at >= from_dt, Payment.created_at <= to_dt)
@@ -597,8 +619,13 @@ def dashboard():
         or 0
     )
     topup_period = db.session.query(db.func.sum(BalanceTopUp.amount)).filter(BalanceTopUp.created_at >= from_dt, BalanceTopUp.created_at <= to_dt).scalar() or 0
-    expenses_period = db.session.query(db.func.sum(Expense.amount)).filter(Expense.created_at >= from_dt, Expense.created_at <= to_dt).scalar() or 0
-    house_balance = round(float(income_total) + float(topup_total) - float(expenses_total), 2)
+    expenses_period = (
+        db.session.query(db.func.sum(Expense.amount))
+        .filter(Expense.is_paid == True, Expense.created_at >= from_dt, Expense.created_at <= to_dt)
+        .scalar()
+        or 0
+    )
+    house_balance = round(float(income_total) + float(topup_total) - float(paid_expenses_total), 2)
 
     return render_template(
         "admin_dashboard.html",
@@ -807,7 +834,17 @@ def generate_invoices():
         amount = float(t.default_amount or 0)
         if amount <= 0:
             continue
-        db.session.add(Expense(period=period, name=t.name, amount=round(amount, 2), template_id=t.id, created_by_user_id=current_user().id))
+        db.session.add(
+            Expense(
+                period=period,
+                name=t.name,
+                amount=round(amount, 2),
+                is_paid=False,
+                paid_at=None,
+                template_id=t.id,
+                created_by_user_id=current_user().id,
+            )
+        )
         created_exp += 1
     if created_exp:
         db.session.commit()
@@ -898,7 +935,7 @@ def admin_expenses():
             if amount <= 0:
                 flash("Məbləğ sıfırdan böyük olmalıdır.", "danger")
                 return redirect(url_for("admin_expenses"))
-            db.session.add(Expense(period=period, name=name, amount=round(amount, 2), created_by_user_id=current_user().id))
+            db.session.add(Expense(period=period, name=name, amount=round(amount, 2), is_paid=False, paid_at=None, created_by_user_id=current_user().id))
             db.session.commit()
             audit(f"Xərc daxil edildi: {name} {amount:.2f} AZN period {period}")
             flash("Xərc daxil edildi.", "success")
@@ -951,6 +988,19 @@ def delete_expense(expense_id):
     audit(f"Xərc silindi #{expense_id}: {desc}")
     flash("Xərc silindi.", "success")
     return redirect(url_for("admin_expenses", period=period))
+
+
+@app.route("/admin/expenses/toggle-paid/<int:expense_id>", methods=["POST"])
+@login_required
+@role_required("komendant", "superadmin")
+def toggle_expense_paid(expense_id):
+    e = Expense.query.get_or_404(expense_id)
+    e.is_paid = not bool(e.is_paid)
+    e.paid_at = datetime.utcnow() if e.is_paid else None
+    db.session.commit()
+    audit(f"Xərc {'ödəndi' if e.is_paid else 'ödənilmədi'} #{e.id}: {e.name} {float(e.amount):.2f} period {e.period}")
+    flash("Xərc statusu yeniləndi.", "success")
+    return redirect(url_for("admin_expenses", period=e.period))
 
 
 @app.route("/admin/invoices")
@@ -1088,6 +1138,7 @@ def admin_history():
                 "apartment": None,
                 "comment": (e.name or "").strip() or None,
                 "period": e.period,
+                "paid": bool(e.is_paid),
             }
         )
 

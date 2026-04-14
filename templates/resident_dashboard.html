@@ -70,7 +70,7 @@
         <div class="card metric-card border-0 shadow-sm">
             <div class="card-body">
                 <div class="text-muted small">Ödənilməmiş xərclər (bina)</div>
-                <div class="h5 mb-0 text-danger">{{ unpaid_expenses|azn }}</div>
+                <div class="h5 mb-0 text-danger">{{ (unpaid_expenses or 0)|azn }}</div>
             </div>
         </div>
     </div>
@@ -145,7 +145,7 @@
         <div class="table-responsive">
             <table class="table align-middle">
                 <thead>
-                    <tr><th>Tarix</th><th>Period</th><th>Ad</th><th class="text-end">Məbləğ</th></tr>
+                    <tr><th>Tarix</th><th>Period</th><th>Ad</th><th>Status</th><th class="text-end">Məbləğ</th></tr>
                 </thead>
                 <tbody>
                     {% for e in recent_expenses %}
@@ -153,10 +153,17 @@
                         <td class="text-muted small">{{ e.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
                         <td class="text-muted small">{{ e.period }}</td>
                         <td>{{ e.name }}</td>
+                        <td>
+                            {% if e.is_paid %}
+                                <span class="badge bg-success">Ödənilib</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Gözləmədə</span>
+                            {% endif %}
+                        </td>
                         <td class="text-end text-danger fw-semibold">{{ e.amount|azn }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="4" class="text-muted">Xərc yoxdur.</td></tr>
+                    <tr><td colspan="5" class="text-muted">Xərc yoxdur.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

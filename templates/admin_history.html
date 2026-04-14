@@ -15,6 +15,7 @@
                         <th>Növ</th>
                         <th>Mənzil</th>
                         <th>Period</th>
+                        <th>Status</th>
                         <th class="text-end">Məbləğ</th>
                         <th>Qeyd</th>
                     </tr>
@@ -34,13 +35,24 @@
                         </td>
                         <td>{{ e.apartment or '-' }}</td>
                         <td class="text-muted small">{{ e.period or '-' }}</td>
+                        <td>
+                            {% if e.type == 'expense' %}
+                                {% if e.paid %}
+                                    <span class="badge bg-success">Ödənilib</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">Gözləmədə</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted small">-</span>
+                            {% endif %}
+                        </td>
                         <td class="text-end {% if e.amount < 0 %}text-danger{% else %}text-success{% endif %} fw-semibold">
                             {{ e.amount|azn }}
                         </td>
                         <td class="small">{{ e.comment or '' }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="6" class="text-muted">Tarixçə boşdur.</td></tr>
+                    <tr><td colspan="7" class="text-muted">Tarixçə boşdur.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
