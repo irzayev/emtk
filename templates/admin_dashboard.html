@@ -55,13 +55,6 @@
 
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
-        <h5>Odenis / Xərclər / Balans</h5>
-        <canvas id="paymentsChart" height="90"></canvas>
-    </div>
-</div>
-
-<div class="card border-0 shadow-sm mb-3">
-    <div class="card-body">
         <h5>Ödəniş cədvəli</h5>
         <div class="table-responsive">
             <table class="table">
@@ -94,6 +87,13 @@
     </div>
 </div>
 
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+        <h5>Ödənişlər / Xərclər / Balans</h5>
+        <canvas id="paymentsChart" height="90"></canvas>
+    </div>
+</div>
+
 <div class="card border-0 shadow-sm">
     <div class="card-body">
         <h5>Son əməliyyatlar (Audit)</h5>
@@ -118,7 +118,7 @@
             data: {
                 labels: {{ chart_labels|tojson }},
                 datasets: [
-                    { label: "Odenisler (AZN)", data: {{ chart_payments|tojson }}, borderColor: "#198754", tension: 0.2 },
+                    { label: "Ödənişlər (AZN)", data: {{ chart_payments|tojson }}, borderColor: "#198754", tension: 0.2 },
                     { label: "Xərclər (AZN)", data: {{ chart_expenses|tojson }}, borderColor: "#dc3545", tension: 0.2 },
                     { label: "Balans (AZN)", data: {{ chart_balance|tojson }}, borderColor: "#0d6efd", tension: 0.2 }
                 ]
