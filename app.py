@@ -13,9 +13,10 @@ from werkzeug.utils import secure_filename
 
 
 app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///smart_zhk.db"
+# Persist SQLite DB in /app/instance (volume-mounted in compose).
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:////app/instance/smart_zhk.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SECRET_KEY"] = "change-this-in-production"
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "change-this-in-production")
 app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
 db = SQLAlchemy(app)
 
