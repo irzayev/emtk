@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">İstifadəçilər</h3>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard') }}">Geri</a>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <h5 class="mb-3">İstifadəçi əlavə et</h5>
+        <form method="post" action="{{ url_for('admin_user_create') }}" class="row g-2">
+            <div class="col-md-4">
+                <input class="form-control" name="full_name" placeholder="Ad Soyad" required>
+            </div>
+            <div class="col-md-2">
+                <input class="form-control" name="phone" placeholder="Telefon">
+            </div>
+            <div class="col-md-3">
+                <input class="form-control" type="email" name="email" placeholder="Email" required>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" name="role" required>
+                    <option value="resident">resident</option>
+                    <option value="commandant">commandant</option>
+                    <option value="superadmin">superadmin</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <input class="form-control" type="password" name="password" placeholder="Şifrə" required>
+            </div>
+            <div class="col-12">
+                <button class="btn btn-primary">Əlavə et</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Ad</th>
+                        <th>Telefon</th>
+                        <th>Email</th>
+                        <th>Rol</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr>
+                        <td class="text-muted small">{{ u.id }}</td>
+                        <td>{{ u.full_name }}</td>
+                        <td class="text-muted small">{{ u.phone or '-' }}</td>
+                        <td>{{ u.email }}</td>
+                        <td><span class="badge bg-secondary">{{ u.role }}</span></td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-user-{{ u.id }}">Redaktə et</button>
+                            <form method="post" action="{{ url_for('admin_user_delete', user_id=u.id) }}" class="d-inline" onsubmit="return confirm('İstifadəçi silinsin?');">
+                                <button class="btn btn-sm btn-outline-danger">Sil</button>
+                            </form>
+                        </td>
+                    </tr>
+                    <tr class="collapse" id="edit-user-{{ u.id }}">
+                        <td colspan="6" class="bg-light">
+                            <form method="post" action="{{ url_for('admin_user_update', user_id=u.id) }}" class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Ad</label>
+                                    <input class="form-control" name="full_name" value="{{ u.full_name }}" required>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small mb-1">Telefon</label>
+                                    <input class="form-control" name="phone" value="{{ u.phone or '' }}">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small mb-1">Email</label>
+                                    <input class="form-control" type="email" name="email" value="{{ u.email }}" required>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small mb-1">Rol</label>
+                                    <select class="form-select" name="role" required>
+                                        <option value="resident" {% if u.role == 'resident' %}selected{% endif %}>resident</option>
+                                        <option value="commandant" {% if u.role == 'commandant' %}selected{% endif %}>commandant</option>
+                                        <option value="superadmin" {% if u.role == 'superadmin' %}selected{% endif %}>superadmin</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-1">
+                                    <label class="form-label small mb-1">Şifrə</label>
+                                    <input class="form-control" type="password" name="password" placeholder="(dəyişmək)">
+                                </div>
+                                <div class="col-12">
+                                    <button class="btn btn-primary btn-sm">Yadda saxla</button>
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-muted">İstifadəçi yoxdur.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

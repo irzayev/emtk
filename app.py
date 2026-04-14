@@ -1145,6 +1145,120 @@ def delete_worklog(worklog_id):
     return redirect(url_for("admin_content", type="work"))
 
 
+@app.route("/admin/users")
+@login_required
+@role_required("commandant", "superadmin")
+def admin_users():
+    users = User.query.order_by(User.id.desc()).all()
+    return render_template("admin_users.html", users=users)
+
+
+@app.route("/admin/users/create", methods=["POST"])
+@login_required
+@role_required("commandant", "superadmin")
+def admin_user_create():
+    full_name = (request.form.get("full_name") or "").strip()
+    phone = (request.form.get("phone") or "").strip() or None
+    email = (request.form.get("email") or "").strip().lower()
+    role = (request.form.get("role") or "resident").strip()
+    password = request.form.get("password") or ""
+
+    if not full_name or not email or not password:
+        flash("Zorunlu sahələr boş ola bilməz.", "danger")
+        return redirect(url_for("admin_users"))
+    if role not in ("resident", "commandant", "superadmin"):
+        flash("Rol duzgun deyil.", "danger")
+        return redirect(url_for("admin_users"))
+    if User.query.filter_by(email=email).first():
+        flash("Bu email ile artiq istifadəçi var.", "warning")
+        return redirect(url_for("admin_users"))
+
+    db.session.add(
+        User(
+            full_name=full_name,
+            phone=phone,
+            email=email,
+            password_hash=generate_password_hash(password),
+            role=role,
+        )
+    )
+    db.session.commit()
+    audit(f"İstifadəçi yaradıldı {email} ({role})")
+    flash("İstifadəçi yaradıldı.", "success")
+    return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/users/update/<int:user_id>", methods=["POST"])
+@login_required
+@role_required("commandant", "superadmin")
+def admin_user_update(user_id):
+    target = User.query.get_or_404(user_id)
+
+    full_name = (request.form.get("full_name") or "").strip()
+    phone = (request.form.get("phone") or "").strip() or None
+    email = (request.form.get("email") or "").strip().lower()
+    role = (request.form.get("role") or target.role).strip()
+    new_password = (request.form.get("password") or "").strip()
+
+    if not full_name or not email:
+        flash("Ad və email boş ola bilməz.", "danger")
+        return redirect(url_for("admin_users"))
+    if role not in ("resident", "commandant", "superadmin"):
+        flash("Rol duzgun deyil.", "danger")
+        return redirect(url_for("admin_users"))
+    duplicate = User.query.filter(User.email == email, User.id != target.id).first()
+    if duplicate:
+        flash("Bu email başqa istifadəçidə var.", "warning")
+        return redirect(url_for("admin_users"))
+
+    # Prevent self-demoting to resident (locks admin out).
+    me = current_user()
+    if me and me.id == target.id and target.role in ("commandant", "superadmin") and role == "resident":
+        flash("Öz rolunuzu resident edə bilməzsiniz.", "warning")
+        return redirect(url_for("admin_users"))
+
+    target.full_name = full_name
+    target.phone = phone
+    target.email = email
+    target.role = role
+    if new_password:
+        target.password_hash = generate_password_hash(new_password)
+
+    db.session.commit()
+    audit(f"İstifadəçi yeniləndi #{target.id} {target.email} ({target.role})")
+    flash("İstifadəçi yeniləndi.", "success")
+    return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/users/delete/<int:user_id>", methods=["POST"])
+@login_required
+@role_required("commandant", "superadmin")
+def admin_user_delete(user_id):
+    target = User.query.get_or_404(user_id)
+    me = current_user()
+    if me and me.id == target.id:
+        flash("Özünüzü silə bilməzsiniz.", "warning")
+        return redirect(url_for("admin_users"))
+
+    has_apartments = Apartment.query.filter_by(owner_user_id=target.id).first() is not None
+    referenced = (
+        Payment.query.filter_by(reviewer_user_id=target.id).first() is not None
+        or BalanceTopUp.query.filter_by(created_by_user_id=target.id).first() is not None
+        or Expense.query.filter_by(created_by_user_id=target.id).first() is not None
+        or AuditLog.query.filter_by(actor_user_id=target.id).first() is not None
+    )
+    if has_apartments or referenced:
+        flash("İstifadəçini silmək olmur: bağlı məlumatlar var.", "warning")
+        return redirect(url_for("admin_users"))
+
+    email = target.email
+    db.session.delete(target)
+    db.session.commit()
+    audit(f"İstifadəçi silindi {email}")
+    flash("İstifadəçi silindi.", "success")
+    return redirect(url_for("admin_users"))
+
+
 @app.route("/polls", methods=["GET", "POST"])
 @login_required
 def polls():
