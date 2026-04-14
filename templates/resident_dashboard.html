@@ -82,7 +82,7 @@
         <div class="table-responsive">
             <table class="table align-middle">
                 <thead>
-                    <tr><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Status</th><th>Qəbz</th></tr>
+                    <tr><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Status</th><th></th></tr>
                 </thead>
                 <tbody>
                     {% for i in invoices %}
@@ -93,7 +93,7 @@
                         <td><span class="badge bg-{{ 'success' if i.status == 'odenilib' else 'warning' }}">{{ i.status }}</span></td>
                         <td>
                             {% if receipt_by_invoice.get(i.id) %}
-                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('resident_receipt', payment_id=receipt_by_invoice.get(i.id)) }}">Qebz</a>
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('resident_receipt', payment_id=receipt_by_invoice.get(i.id)) }}">Qəbz</a>
                             {% else %}
                             <span class="text-muted small">-</span>
                             {% endif %}
