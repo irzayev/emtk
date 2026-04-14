@@ -23,7 +23,9 @@
                 <select class="form-select" name="role" required>
                     <option value="resident">resident</option>
                     <option value="komendant">komendant</option>
+                    {% if session.get('role') == 'superadmin' %}
                     <option value="superadmin">superadmin</option>
+                    {% endif %}
                 </select>
             </div>
             <div class="col-md-1">
@@ -87,7 +89,9 @@
                                     <select class="form-select" name="role" required>
                                         <option value="resident" {% if u.role == 'resident' %}selected{% endif %}>resident</option>
                                         <option value="komendant" {% if u.role == 'komendant' %}selected{% endif %}>komendant</option>
+                                        {% if session.get('role') == 'superadmin' or u.role != 'superadmin' %}
                                         <option value="superadmin" {% if u.role == 'superadmin' %}selected{% endif %}>superadmin</option>
+                                        {% endif %}
                                     </select>
                                 </div>
                                 <div class="col-md-1">

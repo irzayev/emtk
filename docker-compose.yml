@@ -1,7 +1,7 @@
 services:
-  smart-zhk:
+  emtk:
     build: .
-    container_name: smart-zhk-mvp
+    container_name: emtk
     ports:
       - "127.0.0.1:5000:5000"
     environment:

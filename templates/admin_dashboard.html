@@ -3,7 +3,10 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Komendant paneli</h3>
     <div class="d-flex gap-2">
-        <a class="btn btn-primary btn-sm" href="{{ url_for('generate_invoices') }}">Hesablari yarat</a>
+        <form method="post" action="{{ url_for('generate_invoices') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-primary btn-sm" type="submit">Hesablari yarat</button>
+        </form>
     </div>
 </div>
 

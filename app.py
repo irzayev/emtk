@@ -20,7 +20,15 @@ app = Flask(__name__)
 # Persist SQLite DB in /app/instance (volume-mounted in compose).
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:////app/instance/smart_zhk.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "change-this-in-production")
+debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
+secret_key = os.getenv("SECRET_KEY")
+if not secret_key:
+    if debug_mode:
+        # Development-only fallback to avoid shipping a static weak key.
+        secret_key = "dev-only-secret-change-me"
+    else:
+        raise RuntimeError("SECRET_KEY must be set in production.")
+app.config["SECRET_KEY"] = secret_key
 app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
 
 # Session cookie hardening (behind HTTPS reverse proxy).
@@ -537,6 +545,7 @@ def login():
         password = request.form["password"]
         user = User.query.filter_by(email=email).first()
         if user and check_password_hash(user.password_hash, password):
+            session.clear()
             session["user_id"] = user.id
             session["role"] = user.role
             session.pop("selected_apartment_id", None)
@@ -576,7 +585,7 @@ def register():
     return render_template("register.html")
 
 
-@app.route("/logout")
+@app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
     return redirect(url_for("login"))
@@ -921,7 +930,7 @@ def delete_tariff(tariff_id):
     return redirect(url_for("admin_tariffs"))
 
 
-@app.route("/admin/invoices/generate")
+@app.route("/admin/invoices/generate", methods=["POST"])
 @login_required
 @role_required("komendant", "superadmin")
 def generate_invoices():
@@ -1529,6 +1538,10 @@ def admin_user_create():
     if role not in ("resident", "komendant", "superadmin"):
         flash("Rol duzgun deyil.", "danger")
         return redirect(url_for("admin_users"))
+    me = current_user()
+    if role == "superadmin" and (not me or me.role != "superadmin"):
+        flash("Yalnız superadmin superadmin yarada bilər.", "danger")
+        return redirect(url_for("admin_users"))
     if User.query.filter_by(email=email).first():
         flash("Bu email ile artiq istifadəçi var.", "warning")
         return redirect(url_for("admin_users"))
@@ -1571,13 +1584,16 @@ def admin_user_update(user_id):
     if role not in ("resident", "komendant", "superadmin"):
         flash("Rol duzgun deyil.", "danger")
         return redirect(url_for("admin_users"))
+    me = current_user()
+    if me and me.role != "superadmin" and (target.role == "superadmin" or role == "superadmin"):
+        flash("Superadmin hesablarını yalnız superadmin idarə edə bilər.", "danger")
+        return redirect(url_for("admin_users"))
     duplicate = User.query.filter(User.email == email, User.id != target.id).first()
     if duplicate:
         flash("Bu email başqa istifadəçidə var.", "warning")
         return redirect(url_for("admin_users"))
 
     # Prevent self-demoting to resident (locks admin out).
-    me = current_user()
     if me and me.id == target.id and target.role in ("komendant", "superadmin") and role == "resident":
         flash("Öz rolunuzu resident edə bilməzsiniz.", "warning")
         return redirect(url_for("admin_users"))
@@ -1603,6 +1619,9 @@ def admin_user_delete(user_id):
     me = current_user()
     if me and me.id == target.id:
         flash("Özünüzü silə bilməzsiniz.", "warning")
+        return redirect(url_for("admin_users"))
+    if me and me.role != "superadmin" and target.role == "superadmin":
+        flash("Superadmin hesabını yalnız superadmin silə bilər.", "danger")
         return redirect(url_for("admin_users"))
 
     has_apartments = Apartment.query.filter_by(owner_user_id=target.id).first() is not None
@@ -1847,10 +1866,7 @@ if __name__ == "__main__":
         ensure_tariff_scope_schema()
         ensure_user_role_migration()
         get_smtp_config()
-    # Fail fast in production if SECRET_KEY is not set.
-    if os.getenv("FLASK_DEBUG", "0") != "1" and app.config["SECRET_KEY"] == "change-this-in-production":
-        raise RuntimeError("SECRET_KEY must be set in production.")
     host = os.getenv("FLASK_HOST", "0.0.0.0")
     port = int(os.getenv("FLASK_PORT", "5000"))
-    debug = os.getenv("FLASK_DEBUG", "1") == "1"
+    debug = os.getenv("FLASK_DEBUG", "0") == "1"
     app.run(host=host, port=port, debug=debug)
