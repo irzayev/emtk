@@ -26,7 +26,7 @@
 
 <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-5 g-3 mb-4">
     <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Menzil sayi</div><div class="h4">{{ apartments_count }}</div></div></div></div>
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Umumi borc</div><div class="h4 text-danger">{{ total_debt|azn }}</div></div></div></div>
+    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Ümumi balans</div><div class="h4 text-danger">{{ total_debt|azn }}</div></div></div></div>
     <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Balans</div><div class="h4 {{ 'text-success' if house_balance >= 0 else 'text-danger' }}">{{ house_balance|azn }}</div></div></div></div>
     <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Xərclər (ödənilmiş)</div><div class="h4 text-danger">{{ paid_expenses_total|azn }}</div></div></div></div>
     <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Xərclər (ödənilməmiş)</div><div class="h4 text-danger">{{ unpaid_expenses_total|azn }}</div></div></div></div>
@@ -80,9 +80,9 @@
 
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
-        <h5>Borc cədvəli</h5>
+        <h5>Balans cədvəli</h5>
         <table class="table">
-            <thead><tr><th>Mənzil</th><th>Borc</th></tr></thead>
+            <thead><tr><th>Mənzil</th><th>Balans</th></tr></thead>
             <tbody>
                 {% for ap_no, debt in debt_by_apartment %}
                 <tr><td>{{ ap_no }}</td><td>{{ (debt or 0)|azn }}</td></tr>
