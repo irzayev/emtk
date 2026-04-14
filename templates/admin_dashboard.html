@@ -6,40 +6,6 @@
         <a class="btn btn-primary btn-sm" href="{{ url_for('generate_invoices') }}">Hesablari yarat</a>
     </div>
 </div>
-<form method="get" class="row g-2 mb-3">
-    <div class="col-md-3"><input class="form-control js-datepicker" type="text" name="from_date" value="{{ from_date }}" placeholder="YYYY-MM-DD"></div>
-    <div class="col-md-3"><input class="form-control js-datepicker" type="text" name="to_date" value="{{ to_date }}" placeholder="YYYY-MM-DD"></div>
-    <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
-</form>
-
-<div class="row row-cols-1 row-cols-sm-2 row-cols-lg-5 g-3 mb-4">
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Menzil sayi</div><div class="h4">{{ apartments_count }}</div></div></div></div>
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Umumi borc</div><div class="h4 text-danger">{{ total_debt|azn }}</div></div></div></div>
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Balans</div><div class="h4 {{ 'text-success' if house_balance >= 0 else 'text-danger' }}">{{ house_balance|azn }}</div></div></div></div>
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Xərclər (ümumi, ödənilmiş)</div><div class="h4 text-danger">{{ paid_expenses_total|azn }}</div></div></div></div>
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Xərclər (ümumi, ödənilməmiş)</div><div class="h4 text-danger">{{ unpaid_expenses_total|azn }}</div></div></div></div>
-</div>
-
-<div class="card border-0 shadow-sm mb-3">
-    <div class="card-body">
-        <h5 class="mb-2">Balans artirma</h5>
-        <form method="post" action="{{ url_for('balance_topup') }}" class="row g-2 align-items-end">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="col-md-2">
-                <label class="form-label">Məbləğ</label>
-                <input class="form-control" type="number" step="0.01" min="0.01" max="9999" name="amount" required>
-            </div>
-            <div class="col-md-8">
-                <label class="form-label">Komentariya</label>
-                <input class="form-control" name="comment" placeholder="Məs: Sponsor, əlavə yığım, ...">
-            </div>
-            <div class="col-md-2">
-                <button class="btn btn-success w-100">Daxil</button>
-            </div>
-        </form>
-        <div class="small text-muted mt-2">Popolenis umumi balansa gelir kimi elave olunur.</div>
-    </div>
-</div>
 
 <div class="d-flex flex-wrap gap-2 mb-3">
     <a class="btn btn-outline-secondary" href="{{ url_for('admin_apartments') }}">Mənzillər</a>
@@ -52,6 +18,41 @@
     <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments_report') }}">Ödənişlər (aylıq)</a>
 </div>
 
+<form method="get" class="row g-2 mb-3">
+    <div class="col-md-3"><input class="form-control js-datepicker" type="text" name="from_date" value="{{ from_date }}" placeholder="YYYY-MM-DD"></div>
+    <div class="col-md-3"><input class="form-control js-datepicker" type="text" name="to_date" value="{{ to_date }}" placeholder="YYYY-MM-DD"></div>
+    <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
+</form>
+
+<div class="row row-cols-1 row-cols-sm-2 row-cols-lg-5 g-3 mb-4">
+    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Menzil sayi</div><div class="h4">{{ apartments_count }}</div></div></div></div>
+    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Umumi borc</div><div class="h4 text-danger">{{ total_debt|azn }}</div></div></div></div>
+    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Balans</div><div class="h4 {{ 'text-success' if house_balance >= 0 else 'text-danger' }}">{{ house_balance|azn }}</div></div></div></div>
+    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Xərclər (ödənilmiş)</div><div class="h4 text-danger">{{ paid_expenses_total|azn }}</div></div></div></div>
+    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Xərclər (ödənilməmiş)</div><div class="h4 text-danger">{{ unpaid_expenses_total|azn }}</div></div></div></div>
+</div>
+
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+        <h5 class="mb-2">Balans artırma</h5>
+        <form method="post" action="{{ url_for('balance_topup') }}" class="row g-2 align-items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-md-2">
+                <label class="form-label">Məbləğ</label>
+                <input class="form-control" type="number" step="0.01" min="0.01" max="9999" name="amount" required>
+            </div>
+            <div class="col-md-8">
+                <label class="form-label">Şərhlər</label>
+                <input class="form-control" name="comment" placeholder="Məs: Sponsor, əlavə yığım, ...">
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-success w-100">Mədaxil</button>
+            </div>
+        </form>
+        <div class="small text-muted mt-2">Umumi balansa gəlir kimi əlavə olunur.</div>
+    </div>
+</div>
+
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
         <h5>Odenis / Xərclər / Balans</h5>
@@ -61,10 +62,10 @@
 
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
-        <h5>Odenis cedveli</h5>
+        <h5>Ödəniş cədvəli</h5>
         <div class="table-responsive">
             <table class="table">
-                <thead><tr><th>Menzil</th><th>Period</th><th>Məbləğ</th><th>Tarix</th></tr></thead>
+                <thead><tr><th>Mənzil</th><th>Period</th><th>Məbləğ</th><th>Tarix</th></tr></thead>
                 <tbody>
                     {% for r in payment_table %}
                     <tr><td>{{ r.apartment }}</td><td>{{ r.period }}</td><td>{{ r.amount|azn }}</td><td>{{ r.date }}</td></tr>
@@ -79,9 +80,9 @@
 
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
-        <h5>Borc cedveli</h5>
+        <h5>Borc cədvəli</h5>
         <table class="table">
-            <thead><tr><th>Menzil</th><th>Borc</th></tr></thead>
+            <thead><tr><th>Mənzil</th><th>Borc</th></tr></thead>
             <tbody>
                 {% for ap_no, debt in debt_by_apartment %}
                 <tr><td>{{ ap_no }}</td><td>{{ (debt or 0)|azn }}</td></tr>
@@ -95,7 +96,7 @@
 
 <div class="card border-0 shadow-sm">
     <div class="card-body">
-        <h5>Son emeliyyatlar (Audit)</h5>
+        <h5>Son əməliyyatlar (Audit)</h5>
         <ul class="list-group list-group-flush">
             {% for log in recent_logs %}
             <li class="list-group-item px-0 d-flex justify-content-between">
