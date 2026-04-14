@@ -124,7 +124,6 @@ class SmtpConfig(db.Model):
     sender_email = db.Column(db.String(120), nullable=True)
     use_tls = db.Column(db.Boolean, nullable=False, default=True)
     system_name = db.Column(db.String(120), nullable=True)
-    domain = db.Column(db.String(255), nullable=True)
     house_address = db.Column(db.String(255), nullable=True)
     commandant_name = db.Column(db.String(120), nullable=True)
     contact_phone = db.Column(db.String(50), nullable=True)
@@ -334,8 +333,6 @@ def ensure_system_schema():
         columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(smtp_config)")}
         if "system_name" not in columns:
             conn.exec_driver_sql("ALTER TABLE smtp_config ADD COLUMN system_name VARCHAR(120)")
-        if "domain" not in columns:
-            conn.exec_driver_sql("ALTER TABLE smtp_config ADD COLUMN domain VARCHAR(255)")
         if "house_address" not in columns:
             conn.exec_driver_sql("ALTER TABLE smtp_config ADD COLUMN house_address VARCHAR(255)")
         if "commandant_name" not in columns:
@@ -1786,7 +1783,6 @@ def admin_settings():
         form_type = request.form.get("form_type", "save_smtp")
         if form_type == "save_system":
             cfg.system_name = request.form.get("system_name", "").strip() or None
-            cfg.domain = request.form.get("domain", "").strip() or None
             cfg.house_address = request.form.get("house_address", "").strip() or None
             cfg.commandant_name = request.form.get("commandant_name", "").strip() or None
             cfg.contact_phone = request.form.get("contact_phone", "").strip() or None

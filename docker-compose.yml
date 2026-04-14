@@ -2,8 +2,8 @@ services:
   emtk:
     build: .
     container_name: emtk
-    expose:
-      - "5000"
+    ports:
+      - "127.0.0.1:5000:5000"
     environment:
       - FLASK_DEBUG=0
       - FLASK_HOST=0.0.0.0
@@ -13,37 +13,3 @@ services:
       - ./instance:/app/instance
       - ./static/uploads:/app/static/uploads
     restart: unless-stopped
-
-  nginx:
-    image: nginx:1.27-alpine
-    container_name: emtk-nginx
-    depends_on:
-      - emtk
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      - LETSENCRYPT_DOMAIN=${LETSENCRYPT_DOMAIN:-emtk.itg.az}
-    volumes:
-      - ./nginx/templates:/etc/nginx/templates:ro
-      - ./scripts/nginx-entrypoint.sh:/nginx-entrypoint.sh:ro
-      - letsencrypt:/etc/letsencrypt
-      - certbot_webroot:/var/www/certbot
-    command: /bin/sh -c "chmod +x /nginx-entrypoint.sh && /nginx-entrypoint.sh"
-    restart: unless-stopped
-
-  certbot:
-    image: certbot/certbot:latest
-    container_name: emtk-certbot
-    depends_on:
-      - nginx
-    volumes:
-      - letsencrypt:/etc/letsencrypt
-      - certbot_webroot:/var/www/certbot
-      - ./scripts/certbot-renew.sh:/certbot-renew.sh:ro
-    command: /bin/sh -c "chmod +x /certbot-renew.sh && /certbot-renew.sh"
-    restart: unless-stopped
-
-volumes:
-  letsencrypt:
-  certbot_webroot:
