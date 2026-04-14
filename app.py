@@ -236,6 +236,20 @@ def ensure_user_role_migration():
         conn.exec_driver_sql("UPDATE user SET role='komendant' WHERE role='commandant'")
 
 
+_did_role_migration = False
+
+
+@app.before_request
+def _run_role_migration_once():
+    global _did_role_migration
+    if _did_role_migration:
+        return
+    try:
+        ensure_user_role_migration()
+    finally:
+        _did_role_migration = True
+
+
 def ensure_expense_schema():
     # Create new tables for expenses if missing.
     with db.engine.connect() as conn:
@@ -1196,6 +1210,8 @@ def admin_user_create():
     if not full_name or not email or not password:
         flash("Zorunlu sahələr boş ola bilməz.", "danger")
         return redirect(url_for("admin_users"))
+    if role == "commandant":
+        role = "komendant"
     if role not in ("resident", "komendant", "superadmin"):
         flash("Rol duzgun deyil.", "danger")
         return redirect(url_for("admin_users"))
@@ -1233,6 +1249,8 @@ def admin_user_update(user_id):
     if not full_name or not email:
         flash("Ad və email boş ola bilməz.", "danger")
         return redirect(url_for("admin_users"))
+    if role == "commandant":
+        role = "komendant"
     if role not in ("resident", "komendant", "superadmin"):
         flash("Rol duzgun deyil.", "danger")
         return redirect(url_for("admin_users"))
