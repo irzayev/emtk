@@ -886,6 +886,48 @@ def admin_expenses():
     return render_template("admin_expenses.html", templates=templates, expenses=expenses, period=period, expenses_total=total)
 
 
+@app.route("/admin/expenses/update/<int:expense_id>", methods=["POST"])
+@login_required
+@role_required("komendant", "superadmin")
+def update_expense(expense_id):
+    e = Expense.query.get_or_404(expense_id)
+    period = (request.form.get("period", "") or "").strip()
+    name = (request.form.get("name", "") or "").strip()
+    amount = float(request.form.get("amount", "0") or 0)
+    if not period or len(period) != 7:
+        flash("Period duzgun deyil (YYYY-MM).", "danger")
+        return redirect(url_for("admin_expenses", period=e.period))
+    if not name:
+        flash("Ad bos ola bilmez.", "danger")
+        return redirect(url_for("admin_expenses", period=e.period))
+    if amount <= 0:
+        flash("Məbləğ sıfırdan böyük olmalıdır.", "danger")
+        return redirect(url_for("admin_expenses", period=e.period))
+
+    old = f"{e.period} {e.name} {float(e.amount):.2f}"
+    e.period = period
+    e.name = name
+    e.amount = round(amount, 2)
+    db.session.commit()
+    audit(f"Xərc yeniləndi #{e.id}: {old} -> {e.period} {e.name} {float(e.amount):.2f}")
+    flash("Xərc yeniləndi.", "success")
+    return redirect(url_for("admin_expenses", period=period))
+
+
+@app.route("/admin/expenses/delete/<int:expense_id>", methods=["POST"])
+@login_required
+@role_required("komendant", "superadmin")
+def delete_expense(expense_id):
+    e = Expense.query.get_or_404(expense_id)
+    period = e.period
+    desc = f"{e.name} {float(e.amount):.2f} period {e.period}"
+    db.session.delete(e)
+    db.session.commit()
+    audit(f"Xərc silindi #{expense_id}: {desc}")
+    flash("Xərc silindi.", "success")
+    return redirect(url_for("admin_expenses", period=period))
+
+
 @app.route("/admin/invoices")
 @login_required
 @role_required("komendant", "superadmin")

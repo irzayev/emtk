@@ -99,16 +99,45 @@
 
                 <div class="table-responsive">
                     <table class="table">
-                        <thead><tr><th>Tarix</th><th>Ad</th><th>Məbləğ</th></tr></thead>
+                        <thead><tr><th>Tarix</th><th>Ad</th><th>Məbləğ</th><th></th></tr></thead>
                         <tbody>
                         {% for e in expenses %}
                             <tr>
                                 <td class="text-muted small">{{ e.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
                                 <td>{{ e.name }}</td>
                                 <td class="text-danger fw-semibold">{{ e.amount|azn }}</td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-expense-{{ e.id }}">Redaktə et</button>
+                                    <form method="post" action="{{ url_for('delete_expense', expense_id=e.id) }}" class="d-inline" onsubmit="return confirm('Xərc silinsin?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button class="btn btn-sm btn-outline-danger">Sil</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            <tr class="collapse" id="edit-expense-{{ e.id }}">
+                                <td colspan="4" class="bg-light">
+                                    <form method="post" action="{{ url_for('update_expense', expense_id=e.id) }}" class="row g-2 align-items-end">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <div class="col-md-3">
+                                            <label class="form-label">Period</label>
+                                            <input class="form-control js-monthpicker" name="period" value="{{ e.period }}" required>
+                                        </div>
+                                        <div class="col-md-5">
+                                            <label class="form-label">Ad</label>
+                                            <input class="form-control" name="name" value="{{ e.name }}" required>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label">Məbləğ</label>
+                                            <input class="form-control" type="number" step="0.01" min="0.01" max="9999" name="amount" value="{{ e.amount }}" required>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <button class="btn btn-primary w-100">Yadda saxla</button>
+                                        </div>
+                                    </form>
+                                </td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="3" class="text-muted">Xerc yoxdur.</td></tr>
+                            <tr><td colspan="4" class="text-muted">Xerc yoxdur.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
