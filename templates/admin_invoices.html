@@ -38,25 +38,25 @@
                                     <input class="form-control form-control-sm" type="number" step="0.01" min="-9999" max="9999" name="amount" placeholder="Məbləğ" required>
                                 </div>
                                 <div class="col-6 col-md-6">
-                                    <input class="form-control form-control-sm" name="comment" placeholder="Qeyd (opsional)">
+                                    <input class="form-control form-control-sm" name="comment" placeholder="Qeyd">
                                 </div>
                                 <div class="col-12 col-md-3">
-                                    <button class="btn btn-sm btn-success w-100">Daxil</button>
+                                    <button class="btn btn-sm btn-success w-100">Mədaxil</button>
                                 </div>
                             </form>
                         </td>
                         <td>
-                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('print_invoice', invoice_id=i.id) }}" target="_blank">Cap</a>
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('print_invoice', invoice_id=i.id) }}" target="_blank">Çap</a>
                         </td>
                         <td>
                             <form method="post" action="{{ url_for('send_invoice_email', invoice_id=i.id) }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button class="btn btn-sm btn-outline-primary">Gonder</button>
+                                <button class="btn btn-sm btn-outline-primary">Göndər</button>
                             </form>
                         </td>
                     </tr>
                 {% else %}
-                    <tr><td colspan="9" class="text-muted">Hesab tapilmadi.</td></tr>
+                    <tr><td colspan="9" class="text-muted">Hesab tapılmadı.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
