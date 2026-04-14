@@ -13,7 +13,7 @@
                 {% for i in invoices %}
                     {% set credit = (i.apartment.credit_balance or 0) %}
                     {% set balance = (i.amount - i.paid_amount - credit) %}
-                    {% set computed_status = ('odenilib' if i.paid_amount >= i.amount else 'gozlemede') %}
+                    {% set computed_status = ('ödənilib' if i.paid_amount >= i.amount else 'gözləmədə') %}
                     <tr>
                         <td>{{ i.apartment.number }}</td>
                         <td>{{ i.period }}</td>
