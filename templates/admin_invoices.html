@@ -20,9 +20,6 @@
                         <td>{{ i.amount|azn }}</td>
                         <td>
                             <div>{{ i.paid_amount|azn }}</div>
-                            {% if credit and credit != 0 %}
-                                <div class="small text-muted">Kredit: {{ credit|azn }}</div>
-                            {% endif %}
                         </td>
                         <td>
                             {% if balance > 0 %}
@@ -41,9 +38,6 @@
                                 <input class="form-control form-control-sm" style="min-width: 160px; max-width: 220px;" name="comment" placeholder="Qeyd (opsional)">
                                 <button class="btn btn-sm btn-success">Daxil</button>
                             </form>
-                            <div class="small text-muted mt-1">
-                                Qeyd: artiq odenilmis hesab ucun elave odenis kredit kimi elave olunur. Sehv odenis ucun menfi mebleg yazmaq olar.
-                            </div>
                         </td>
                         <td>
                             <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('print_invoice', invoice_id=i.id) }}" target="_blank">Cap</a>
