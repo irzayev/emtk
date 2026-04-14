@@ -2,7 +2,12 @@
 {% block content %}
 <div class="d-print-none d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Hesab-faktura</h3>
-    <button class="btn btn-outline-primary" onclick="window.print()">Cap et</button>
+    <div class="d-flex gap-2">
+        <form method="post" action="{{ url_for('send_invoice_email', invoice_id=invoice.id) }}">
+            <button class="btn btn-outline-primary">Email göndər</button>
+        </form>
+        <button class="btn btn-outline-secondary" onclick="window.print()">Cap et</button>
+    </div>
 </div>
 
 <div class="card border-0 shadow-sm">

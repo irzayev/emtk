@@ -1,15 +1,65 @@
 {% extends "base.html" %}
 {% block content %}
+{% set inv = payment.invoice %}
+{% set debt_raw = (inv.amount - inv.paid_amount) %}
+{% set debt = debt_raw if debt_raw > 0 else 0 %}
+<div class="d-print-none d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Ödəniş qəbzi</h3>
+    <button class="btn btn-outline-secondary" onclick="window.print()">Çap et</button>
+</div>
+
 <div class="card border-0 shadow-sm">
     <div class="card-body">
-        <h4>Odenis qebzi</h4>
-        <p class="mb-1"><strong>Qebz ID:</strong> {{ payment.id }}</p>
-        <p class="mb-1"><strong>Menzil:</strong> {{ payment.invoice.apartment.number }}</p>
-        <p class="mb-1"><strong>Period:</strong> {{ payment.invoice.period }}</p>
-        <p class="mb-1"><strong>Məbləğ:</strong> {{ payment.amount|azn }}</p>
-        <p class="mb-1"><strong>Status:</strong> {{ payment.status }}</p>
-        <p class="mb-3"><strong>Tarix:</strong> {{ payment.created_at.strftime('%d.%m.%Y %H:%M') }}</p>
-        <button class="btn btn-outline-primary" onclick="window.print()">Cap et</button>
+        <div class="d-flex justify-content-between flex-wrap gap-3">
+            <div>
+                <div class="text-muted small">Qəbz</div>
+                <div class="h5 mb-0">#{{ payment.id }}</div>
+            </div>
+            <div class="text-end">
+                <div class="text-muted small">Tarix</div>
+                <div class="fw-semibold">{{ payment.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+            </div>
+        </div>
+
+        <hr class="my-3">
+
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="text-muted small">Mənzil</div>
+                <div class="fw-semibold">{{ inv.apartment.number }}</div>
+            </div>
+            <div class="col-md-4">
+                <div class="text-muted small">Period</div>
+                <div class="fw-semibold">{{ inv.period }}</div>
+            </div>
+            <div class="col-md-4">
+                <div class="text-muted small">Status</div>
+                <div class="fw-semibold">
+                    <span class="badge bg-{{ payment_status_badge(payment.status) }}">{{ payment_status_label(payment.status) }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mt-1">
+            <div class="col-md-4">
+                <div class="text-muted small">Ödəniş məbləği</div>
+                <div class="h5 mb-0 text-success">{{ payment.amount|azn }}</div>
+            </div>
+            <div class="col-md-4">
+                <div class="text-muted small">Hesablanıb</div>
+                <div class="fw-semibold">{{ inv.amount|azn }}</div>
+            </div>
+            <div class="col-md-4">
+                <div class="text-muted small">Borc (bu period)</div>
+                <div class="h5 mb-0 {% if debt > 0 %}text-danger{% else %}text-success{% endif %}">{{ debt|azn }}</div>
+            </div>
+        </div>
+
+        {% if payment.comment %}
+        <hr class="my-3">
+        <div class="text-muted small">Qeyd</div>
+        <div>{{ payment.comment }}</div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

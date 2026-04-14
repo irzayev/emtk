@@ -230,6 +230,12 @@ def ensure_system_schema():
             conn.exec_driver_sql("ALTER TABLE smtp_config ADD COLUMN contact_phone VARCHAR(50)")
 
 
+def ensure_user_role_migration():
+    # Rename role value: commandant -> komendant
+    with db.engine.connect() as conn:
+        conn.exec_driver_sql("UPDATE user SET role='komendant' WHERE role='commandant'")
+
+
 def ensure_expense_schema():
     # Create new tables for expenses if missing.
     with db.engine.connect() as conn:
@@ -297,6 +303,30 @@ def notify_residents(subject, body):
     return send_email(subject, body, recipients)
 
 
+def payment_status_label(status: str) -> str:
+    return {
+        "pending": "Gözləmədə",
+        "confirmed": "Təsdiqlənib",
+        "rejected": "İmtina edilib",
+    }.get(status or "", status or "")
+
+
+def payment_status_badge(status: str) -> str:
+    return {
+        "pending": "warning",
+        "confirmed": "success",
+        "rejected": "danger",
+    }.get(status or "", "secondary")
+
+
+@app.context_processor
+def inject_helpers():
+    return {
+        "payment_status_label": payment_status_label,
+        "payment_status_badge": payment_status_badge,
+    }
+
+
 def get_selected_apartment(user):
     apartments = Apartment.query.filter_by(owner_user_id=user.id).order_by(Apartment.number).all()
     if not apartments:
@@ -308,7 +338,7 @@ def get_selected_apartment(user):
 
 
 def can_view_poll_results(user, poll_obj, voted):
-    if user.role in ("commandant", "superadmin"):
+    if user.role in ("komendant", "superadmin"):
         return True
     if poll_obj.result_visibility == "immediate":
         return True
@@ -537,7 +567,7 @@ def dashboard():
 
 @app.route("/admin/balance/topup", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def balance_topup():
     try:
         amount = float(request.form.get("amount", "0") or 0)
@@ -569,7 +599,7 @@ def select_apartment():
 
 @app.route("/admin/apartments", methods=["GET", "POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def admin_apartments():
     if request.method == "POST":
         number = request.form["number"].strip()
@@ -600,7 +630,7 @@ def admin_apartments():
 
 @app.route("/admin/apartments/delete/<int:apartment_id>", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def delete_apartment(apartment_id):
     apartment = Apartment.query.get_or_404(apartment_id)
     has_invoices = Invoice.query.filter_by(apartment_id=apartment.id).first() is not None
@@ -619,7 +649,7 @@ def delete_apartment(apartment_id):
 
 @app.route("/admin/apartments/update/<int:apartment_id>", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def update_apartment(apartment_id):
     apartment = Apartment.query.get_or_404(apartment_id)
     number = request.form["number"].strip()
@@ -644,7 +674,7 @@ def update_apartment(apartment_id):
 
 @app.route("/admin/tariffs", methods=["GET", "POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def admin_tariffs():
     if request.method == "POST":
         tariff = Tariff(
@@ -678,7 +708,7 @@ def admin_tariffs():
 
 @app.route("/admin/tariffs/delete/<int:tariff_id>", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def delete_tariff(tariff_id):
     tariff = Tariff.query.get_or_404(tariff_id)
     tariff_name = tariff.name
@@ -691,7 +721,7 @@ def delete_tariff(tariff_id):
 
 @app.route("/admin/invoices/generate")
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def generate_invoices():
     period = date.today().strftime("%Y-%m")
     active_tariffs = Tariff.query.filter_by(is_active=True).all()
@@ -735,7 +765,7 @@ def generate_invoices():
 
 @app.route("/admin/invoices/recalculate", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def recalculate_invoices():
     period = (request.form.get("period") or "").strip()
     if not period or len(period) != 7:
@@ -770,7 +800,7 @@ def recalculate_invoices():
 
 @app.route("/admin/expenses", methods=["GET", "POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def admin_expenses():
     if request.method == "POST":
         form_type = request.form.get("form_type", "")
@@ -828,7 +858,7 @@ def admin_expenses():
 
 @app.route("/admin/invoices")
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def admin_invoices():
     invoices = Invoice.query.order_by(Invoice.created_at.desc()).all()
     return render_template("admin_invoices.html", invoices=invoices)
@@ -836,7 +866,7 @@ def admin_invoices():
 
 @app.route("/admin/payments/confirm/<int:payment_id>", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def confirm_payment(payment_id):
     payment = Payment.query.get_or_404(payment_id)
     if payment.status != "pending":
@@ -858,7 +888,7 @@ def confirm_payment(payment_id):
 
 @app.route("/admin/payments/reject/<int:payment_id>", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def reject_payment(payment_id):
     payment = Payment.query.get_or_404(payment_id)
     if payment.status != "pending":
@@ -875,7 +905,7 @@ def reject_payment(payment_id):
 
 @app.route("/admin/payments/add/<int:invoice_id>", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def add_payment(invoice_id):
     invoice = Invoice.query.get_or_404(invoice_id)
     try:
@@ -912,7 +942,7 @@ def add_payment(invoice_id):
 
 @app.route("/admin/history")
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def admin_history():
     # Unified history: payments (confirmed), balance top-ups, expenses.
     limit = 300
@@ -987,7 +1017,7 @@ def _iter_months_inclusive(from_period: str, to_period: str):
 
 @app.route("/admin/payments-report")
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def admin_payments_report():
     # Payments per apartment per month (confirmed payments).
     today = date.today()
@@ -1056,7 +1086,7 @@ def resident_receipt(payment_id):
 
 @app.route("/admin/content", methods=["GET", "POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def admin_content():
     content_type = request.args.get("type", "work")
     if request.method == "POST":
@@ -1089,7 +1119,7 @@ def admin_content():
 
 @app.route("/admin/announcements/update/<int:announcement_id>", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def update_announcement(announcement_id):
     announcement = Announcement.query.get_or_404(announcement_id)
     announcement.title = request.form["title"].strip()
@@ -1102,7 +1132,7 @@ def update_announcement(announcement_id):
 
 @app.route("/admin/announcements/delete/<int:announcement_id>", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def delete_announcement(announcement_id):
     announcement = Announcement.query.get_or_404(announcement_id)
     db.session.delete(announcement)
@@ -1114,7 +1144,7 @@ def delete_announcement(announcement_id):
 
 @app.route("/admin/worklogs/update/<int:worklog_id>", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def update_worklog(worklog_id):
     w = WorkLog.query.get_or_404(worklog_id)
     w.title = request.form["title"].strip()
@@ -1135,7 +1165,7 @@ def update_worklog(worklog_id):
 
 @app.route("/admin/worklogs/delete/<int:worklog_id>", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def delete_worklog(worklog_id):
     w = WorkLog.query.get_or_404(worklog_id)
     db.session.delete(w)
@@ -1147,7 +1177,7 @@ def delete_worklog(worklog_id):
 
 @app.route("/admin/users")
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def admin_users():
     users = User.query.order_by(User.id.desc()).all()
     return render_template("admin_users.html", users=users)
@@ -1155,7 +1185,7 @@ def admin_users():
 
 @app.route("/admin/users/create", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def admin_user_create():
     full_name = (request.form.get("full_name") or "").strip()
     phone = (request.form.get("phone") or "").strip() or None
@@ -1166,7 +1196,7 @@ def admin_user_create():
     if not full_name or not email or not password:
         flash("Zorunlu sahələr boş ola bilməz.", "danger")
         return redirect(url_for("admin_users"))
-    if role not in ("resident", "commandant", "superadmin"):
+    if role not in ("resident", "komendant", "superadmin"):
         flash("Rol duzgun deyil.", "danger")
         return redirect(url_for("admin_users"))
     if User.query.filter_by(email=email).first():
@@ -1190,7 +1220,7 @@ def admin_user_create():
 
 @app.route("/admin/users/update/<int:user_id>", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def admin_user_update(user_id):
     target = User.query.get_or_404(user_id)
 
@@ -1203,7 +1233,7 @@ def admin_user_update(user_id):
     if not full_name or not email:
         flash("Ad və email boş ola bilməz.", "danger")
         return redirect(url_for("admin_users"))
-    if role not in ("resident", "commandant", "superadmin"):
+    if role not in ("resident", "komendant", "superadmin"):
         flash("Rol duzgun deyil.", "danger")
         return redirect(url_for("admin_users"))
     duplicate = User.query.filter(User.email == email, User.id != target.id).first()
@@ -1213,7 +1243,7 @@ def admin_user_update(user_id):
 
     # Prevent self-demoting to resident (locks admin out).
     me = current_user()
-    if me and me.id == target.id and target.role in ("commandant", "superadmin") and role == "resident":
+    if me and me.id == target.id and target.role in ("komendant", "superadmin") and role == "resident":
         flash("Öz rolunuzu resident edə bilməzsiniz.", "warning")
         return redirect(url_for("admin_users"))
 
@@ -1232,7 +1262,7 @@ def admin_user_update(user_id):
 
 @app.route("/admin/users/delete/<int:user_id>", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def admin_user_delete(user_id):
     target = User.query.get_or_404(user_id)
     me = current_user()
@@ -1266,7 +1296,7 @@ def polls():
     apartment = Apartment.query.filter_by(owner_user_id=user.id).first() if user.role == "resident" else None
 
     if request.method == "POST":
-        if user.role in ("commandant", "superadmin") and request.form["form_type"] == "create_poll":
+        if user.role in ("komendant", "superadmin") and request.form["form_type"] == "create_poll":
             db.session.add(
                 Poll(
                     title=request.form["title"].strip(),
@@ -1279,7 +1309,7 @@ def polls():
             audit("Sorgu yaradildi")
             flash("Sorgu yaradildi.", "success")
             notify_residents("eMTK: Yeni sorgu", f"Yeni sorgu yaradildi: {request.form['title'].strip()}")
-        elif user.role in ("commandant", "superadmin") and request.form["form_type"] == "toggle_poll_status":
+        elif user.role in ("komendant", "superadmin") and request.form["form_type"] == "toggle_poll_status":
             poll_id = int(request.form["poll_id"])
             poll = Poll.query.get_or_404(poll_id)
             poll.is_open = not poll.is_open
@@ -1325,7 +1355,7 @@ def polls():
 
 @app.route("/admin/invoices/send/<int:invoice_id>", methods=["POST"])
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def send_invoice_email(invoice_id):
     invoice = Invoice.query.get_or_404(invoice_id)
     resident = invoice.apartment.owner
@@ -1373,7 +1403,7 @@ def send_invoice_email(invoice_id):
 
 @app.route("/admin/invoices/print/<int:invoice_id>")
 @login_required
-@role_required("commandant", "superadmin")
+@role_required("komendant", "superadmin")
 def print_invoice(invoice_id):
     invoice = Invoice.query.get_or_404(invoice_id)
     cfg = get_smtp_config()
@@ -1391,7 +1421,7 @@ def print_invoice(invoice_id):
 
 @app.route("/admin/settings", methods=["GET", "POST"])
 @login_required
-@role_required("superadmin", "commandant")
+@role_required("superadmin", "komendant")
 def admin_settings():
     cfg = get_smtp_config()
     if request.method == "POST":
@@ -1436,12 +1466,12 @@ def init_data():
             password_hash=generate_password_hash("admin123"),
             role="superadmin",
         )
-        commandant = User(
-            full_name="Комендант",
+        komendant = User(
+            full_name="Komendant",
             phone="+111111",
             email="commandant@smartzhk.local",
             password_hash=generate_password_hash("commandant123"),
-            role="commandant",
+            role="komendant",
         )
         resident = User(
             full_name="Жилец 1",
@@ -1450,7 +1480,7 @@ def init_data():
             password_hash=generate_password_hash("resident123"),
             role="resident",
         )
-        db.session.add_all([superadmin, commandant, resident])
+        db.session.add_all([superadmin, komendant, resident])
         db.session.commit()
 
         apt = Apartment(number="A-101", floor=1, area=82.5, owner_user_id=resident.id)
@@ -1476,6 +1506,7 @@ if __name__ == "__main__":
         ensure_expense_schema()
         ensure_balance_schema()
         ensure_tariff_scope_schema()
+        ensure_user_role_migration()
         get_smtp_config()
     host = os.getenv("FLASK_HOST", "0.0.0.0")
     port = int(os.getenv("FLASK_PORT", "5000"))

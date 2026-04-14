@@ -91,7 +91,7 @@
                         <td>{{ p.amount|azn }}</td>
                         <td>
                             <span class="badge bg-{% if p.status == 'confirmed' %}success{% elif p.status == 'rejected' %}danger{% else %}warning{% endif %}">
-                                {{ p.status }}
+                                {{ payment_status_label(p.status) }}
                             </span>
                         </td>
                         <td class="small">{{ p.comment or '' }}</td>

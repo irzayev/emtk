@@ -21,7 +21,7 @@
             <div class="col-md-2">
                 <select class="form-select" name="role" required>
                     <option value="resident">resident</option>
-                    <option value="commandant">commandant</option>
+                    <option value="komendant">komendant</option>
                     <option value="superadmin">superadmin</option>
                 </select>
             </div>
@@ -83,7 +83,7 @@
                                     <label class="form-label small mb-1">Rol</label>
                                     <select class="form-select" name="role" required>
                                         <option value="resident" {% if u.role == 'resident' %}selected{% endif %}>resident</option>
-                                        <option value="commandant" {% if u.role == 'commandant' %}selected{% endif %}>commandant</option>
+                                        <option value="komendant" {% if u.role == 'komendant' %}selected{% endif %}>komendant</option>
                                         <option value="superadmin" {% if u.role == 'superadmin' %}selected{% endif %}>superadmin</option>
                                     </select>
                                 </div>

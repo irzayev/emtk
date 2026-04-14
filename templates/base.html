@@ -7,6 +7,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/plugins/monthSelect/style.css">
 </head>
 <body class="bg-body-tertiary">
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
@@ -17,7 +18,7 @@
                     <button class="btn btn-sm btn-outline-light d-flex align-items-center gap-1" id="themeToggle" title="Tema">
                         <span id="themeIcon">☀️</span>
                     </button>
-                    {% if session.get('role') in ['commandant', 'superadmin'] %}
+                    {% if session.get('role') in ['komendant', 'superadmin'] %}
                     <a class="btn btn-sm btn-outline-light" href="{{ url_for('admin_settings') }}">Ayarlar</a>
                     {% endif %}
                     <a class="btn btn-sm btn-outline-light" href="{{ url_for('logout') }}">Cixis</a>
@@ -59,6 +60,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/az.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/plugins/monthSelect/index.js"></script>
     <script>
         (function() {
             const saved = localStorage.getItem("theme") || "light";
@@ -98,6 +100,19 @@
                 flatpickr(el, {
                     locale: Object.assign({}, flatpickr.l10ns.az, { firstDayOfWeek: 1 }),
                     dateFormat: "Y-m-d",
+                    allowInput: true,
+                });
+            });
+        })();
+
+        (function () {
+            const inputs = document.querySelectorAll("input.js-monthpicker");
+            if (!inputs.length || typeof flatpickr === "undefined" || typeof monthSelectPlugin === "undefined") return;
+
+            inputs.forEach((el) => {
+                flatpickr(el, {
+                    locale: Object.assign({}, flatpickr.l10ns.az, { firstDayOfWeek: 1 }),
+                    plugins: [new monthSelectPlugin({ shorthand: true, dateFormat: "Y-m", altFormat: "F Y" })],
                     allowInput: true,
                 });
             });
