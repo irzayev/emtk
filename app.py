@@ -472,7 +472,8 @@ def dashboard():
     if user.role == "resident":
         apartment, apartments = get_selected_apartment(user)
         invoices = Invoice.query.filter_by(apartment_id=apartment.id).order_by(Invoice.created_at.desc()).all() if apartment else []
-        debt = sum(max(0, i.amount - i.paid_amount) for i in invoices)
+        # For resident view we show both debt and credit (overpayment).
+        debt = sum((i.amount - i.paid_amount) for i in invoices)
         receipt_by_invoice = {}
         for i in invoices:
             confirmed = sorted([p for p in i.payments if p.status == "confirmed"], key=lambda x: x.created_at, reverse=True)

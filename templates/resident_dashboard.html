@@ -36,8 +36,14 @@
     <div class="col-md-4">
         <div class="card metric-card border-0 shadow-sm">
             <div class="card-body">
-                <div class="text-muted small">Cari borc</div>
-                <div class="h5 mb-0 text-danger">{{ debt|azn }}</div>
+                <div class="text-muted small">Borc / Kredit</div>
+                {% if debt > 0 %}
+                    <div class="h5 mb-0 text-danger">{{ debt|azn }}</div>
+                {% elif debt < 0 %}
+                    <div class="h5 mb-0 text-success">+{{ (-debt)|azn }}</div>
+                {% else %}
+                    <div class="h5 mb-0 text-muted">{{ 0|azn }}</div>
+                {% endif %}
             </div>
         </div>
     </div>
