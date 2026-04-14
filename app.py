@@ -84,6 +84,7 @@ class Payment(db.Model):
     invoice_id = db.Column(db.Integer, db.ForeignKey("invoice.id"), nullable=False)
     invoice = db.relationship("Invoice", backref="payments")
     amount = db.Column(db.Float, nullable=False)
+    comment = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(20), nullable=False, default="pending")  # pending | confirmed | rejected
     reviewer_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     reviewed_at = db.Column(db.DateTime, nullable=True)
@@ -213,6 +214,8 @@ def ensure_payment_schema():
             conn.exec_driver_sql("ALTER TABLE payment ADD COLUMN reviewer_user_id INTEGER")
         if "reviewed_at" not in columns:
             conn.exec_driver_sql("ALTER TABLE payment ADD COLUMN reviewed_at DATETIME")
+        if "comment" not in columns:
+            conn.exec_driver_sql("ALTER TABLE payment ADD COLUMN comment VARCHAR(255)")
 
 
 def ensure_system_schema():
@@ -415,6 +418,15 @@ def dashboard():
         for i in invoices:
             confirmed = sorted([p for p in i.payments if p.status == "confirmed"], key=lambda x: x.created_at, reverse=True)
             receipt_by_invoice[i.id] = confirmed[0].id if confirmed else None
+        payment_history = []
+        if apartment:
+            payment_history = (
+                Payment.query.join(Invoice, Payment.invoice_id == Invoice.id)
+                .filter(Invoice.apartment_id == apartment.id)
+                .order_by(Payment.created_at.desc())
+                .limit(100)
+                .all()
+            )
         works = WorkLog.query.order_by(WorkLog.created_at.desc()).limit(5).all()
         polls = Poll.query.filter_by(is_open=True).order_by(Poll.created_at.desc()).all()
         return render_template(
@@ -426,6 +438,7 @@ def dashboard():
             receipt_by_invoice=receipt_by_invoice,
             works=works,
             polls=polls,
+            payment_history=payment_history,
         )
 
     from_date = request.args.get("from_date")
@@ -870,6 +883,7 @@ def add_payment(invoice_id):
     except (TypeError, ValueError):
         flash("Məbləğ düzgün deyil.", "danger")
         return redirect(url_for("admin_invoices"))
+    comment = (request.form.get("comment", "") or "").strip() or None
 
     if amount <= 0:
         flash("Məbləğ sıfırdan böyük olmalıdır.", "danger")
@@ -883,6 +897,7 @@ def add_payment(invoice_id):
         Payment(
             invoice_id=invoice.id,
             amount=apply_amount,
+            comment=comment,
             status="confirmed",
             reviewer_user_id=current_user().id,
             reviewed_at=now,
@@ -893,6 +908,138 @@ def add_payment(invoice_id):
     audit(f"Odenis daxil edildi invoice#{invoice.id} {apply_amount:.2f} AZN")
     flash("Odenis daxil edildi.", "success")
     return redirect(url_for("admin_invoices"))
+
+
+@app.route("/admin/history")
+@login_required
+@role_required("commandant", "superadmin")
+def admin_history():
+    # Unified history: payments (confirmed), balance top-ups, expenses.
+    limit = 300
+
+    confirmed_payments = (
+        Payment.query.join(Invoice, Payment.invoice_id == Invoice.id)
+        .join(Apartment, Invoice.apartment_id == Apartment.id)
+        .filter(Payment.status == "confirmed")
+        .order_by(Payment.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    topups = BalanceTopUp.query.order_by(BalanceTopUp.created_at.desc()).limit(limit).all()
+    expenses = Expense.query.order_by(Expense.created_at.desc()).limit(limit).all()
+
+    events = []
+    for p in confirmed_payments:
+        inv = p.invoice
+        events.append(
+            {
+                "dt": p.created_at,
+                "type": "payment",
+                "amount": float(p.amount),
+                "apartment": inv.apartment.number if inv and inv.apartment else None,
+                "comment": (p.comment or "").strip() or None,
+                "period": inv.period if inv else None,
+            }
+        )
+    for t in topups:
+        events.append(
+            {
+                "dt": t.created_at,
+                "type": "topup",
+                "amount": float(t.amount),
+                "apartment": None,
+                "comment": (t.comment or "").strip() or None,
+                "period": None,
+            }
+        )
+    for e in expenses:
+        events.append(
+            {
+                "dt": e.created_at,
+                "type": "expense",
+                "amount": -float(e.amount),
+                "apartment": None,
+                "comment": (e.name or "").strip() or None,
+                "period": e.period,
+            }
+        )
+
+    events.sort(key=lambda x: x["dt"] or datetime.min, reverse=True)
+    events = events[:limit]
+    return render_template("admin_history.html", events=events)
+
+
+def _iter_months_inclusive(from_period: str, to_period: str):
+    def parse(p):
+        y, m = p.split("-")
+        return int(y), int(m)
+
+    fy, fm = parse(from_period)
+    ty, tm = parse(to_period)
+    y, m = fy, fm
+    while (y, m) <= (ty, tm):
+        yield f"{y:04d}-{m:02d}"
+        m += 1
+        if m == 13:
+            m = 1
+            y += 1
+
+
+@app.route("/admin/payments-report")
+@login_required
+@role_required("commandant", "superadmin")
+def admin_payments_report():
+    # Payments per apartment per month (confirmed payments).
+    today = date.today()
+    default_to = today.strftime("%Y-%m")
+    default_from = f"{today.year:04d}-{max(1, today.month - 5):02d}"
+
+    from_period = (request.args.get("from_period") or default_from).strip()
+    to_period = (request.args.get("to_period") or default_to).strip()
+    if len(from_period) != 7 or len(to_period) != 7:
+        flash("Period duzgun deyil (YYYY-MM).", "danger")
+        return redirect(url_for("dashboard"))
+
+    periods = list(_iter_months_inclusive(from_period, to_period))
+    if len(periods) > 24:
+        periods = periods[-24:]
+        from_period = periods[0]
+
+    apartments = Apartment.query.order_by(Apartment.number).all()
+    sums = (
+        db.session.query(Apartment.id, Invoice.period, db.func.sum(Payment.amount))
+        .join(Invoice, Invoice.apartment_id == Apartment.id)
+        .join(Payment, Payment.invoice_id == Invoice.id)
+        .filter(Payment.status == "confirmed", Invoice.period >= from_period, Invoice.period <= to_period)
+        .group_by(Apartment.id, Invoice.period)
+        .all()
+    )
+    amount_by_apt_period = {(apt_id, period): float(total or 0) for apt_id, period, total in sums}
+
+    rows = []
+    for a in apartments:
+        row = {"apartment": a.number, "amounts": [], "row_total": 0.0}
+        for p in periods:
+            v = amount_by_apt_period.get((a.id, p), 0.0)
+            row["amounts"].append(v)
+            row["row_total"] += float(v)
+        row["row_total"] = round(row["row_total"], 2)
+        rows.append(row)
+
+    col_totals = []
+    for idx in range(len(periods)):
+        col_totals.append(round(sum(r["amounts"][idx] for r in rows), 2))
+    grand_total = round(sum(col_totals), 2)
+
+    return render_template(
+        "admin_payments_report.html",
+        from_period=from_period,
+        to_period=to_period,
+        periods=periods,
+        rows=rows,
+        col_totals=col_totals,
+        grand_total=grand_total,
+    )
 
 
 @app.route("/resident/receipt/<int:payment_id>")

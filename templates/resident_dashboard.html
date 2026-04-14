@@ -75,6 +75,36 @@
     </div>
 </div>
 
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <h5>Ödəniş tarixçəsi</h5>
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr><th>Tarix</th><th>Period</th><th>Məbləğ</th><th>Status</th><th>Qeyd</th></tr>
+                </thead>
+                <tbody>
+                    {% for p in payment_history %}
+                    <tr>
+                        <td class="text-muted small">{{ p.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                        <td>{{ p.invoice.period }}</td>
+                        <td>{{ p.amount|azn }}</td>
+                        <td>
+                            <span class="badge bg-{% if p.status == 'confirmed' %}success{% elif p.status == 'rejected' %}danger{% else %}warning{% endif %}">
+                                {{ p.status }}
+                            </span>
+                        </td>
+                        <td class="small">{{ p.comment or '' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-muted">Ödəniş yoxdur.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <div class="row g-3">
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm">

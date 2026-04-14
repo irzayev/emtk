@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Ödənişlər (mənzil / ay)</h3>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard') }}">Geri</a>
+</div>
+
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">From (YYYY-MM)</label>
+                <input class="form-control" name="from_period" value="{{ from_period }}" placeholder="2026-01" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">To (YYYY-MM)</label>
+                <input class="form-control" name="to_period" value="{{ to_period }}" placeholder="2026-04" required>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100">Goster</button>
+            </div>
+            <div class="col-md-3 small text-muted">
+                Yalnız <span class="fw-semibold">confirmed</span> ödənişlər daxil edilir.
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th>Mənzil</th>
+                        {% for p in periods %}
+                        <th class="text-end">{{ p }}</th>
+                        {% endfor %}
+                        <th class="text-end">Cəmi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rows %}
+                    <tr>
+                        <td class="fw-semibold">{{ r.apartment }}</td>
+                        {% for v in r.amounts %}
+                        <td class="text-end">{{ v|azn }}</td>
+                        {% endfor %}
+                        <td class="text-end fw-semibold">{{ r.row_total|azn }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="{{ 2 + (periods|length) }}" class="text-muted">Məlumat yoxdur.</td></tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th>Cəmi</th>
+                        {% for v in col_totals %}
+                        <th class="text-end">{{ v|azn }}</th>
+                        {% endfor %}
+                        <th class="text-end">{{ grand_total|azn }}</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
