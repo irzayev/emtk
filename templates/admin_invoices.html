@@ -28,16 +28,15 @@
                         </td>
                         <td><span class="badge bg-{{ 'success' if i.status == 'odenilib' else 'warning' }}">{{ i.status }}</span></td>
                         <td style="min-width: 240px;">
-                            {% if i.status != 'odenilib' %}
                             <form method="post" action="{{ url_for('add_payment', invoice_id=i.id) }}" class="d-flex gap-2 flex-wrap">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input class="form-control form-control-sm" style="max-width: 140px;" type="number" step="0.01" min="0.01" max="9999" name="amount" placeholder="Məbləğ" required>
                                 <input class="form-control form-control-sm" style="min-width: 160px; max-width: 220px;" name="comment" placeholder="Qeyd (opsional)">
                                 <button class="btn btn-sm btn-success">Daxil</button>
                             </form>
-                            {% else %}
-                            <span class="text-muted small">-</span>
-                            {% endif %}
+                            <div class="small text-muted mt-1">
+                                Qeyd: artiq odenilmis hesab ucun elave odenis kredit kimi elave olunur.
+                            </div>
                         </td>
                         <td>
                             <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('print_invoice', invoice_id=i.id) }}" target="_blank">Cap</a>
