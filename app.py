@@ -698,6 +698,19 @@ def normalize_az_phone(phone_raw: str):
     return phone if re.fullmatch(r"\+994\d{9}", phone) else None
 
 
+def parse_login_identifier(raw: str):
+    """Classify login input: email (contains @) or Azerbaijani phone (+994…)."""
+    s = (raw or "").strip()
+    if not s:
+        return None, None
+    if "@" in s:
+        return "email", s.lower()
+    phone = normalize_az_phone(s)
+    if phone:
+        return "phone", phone
+    return None, None
+
+
 def can_view_poll_results(user, poll_obj, voted):
     if user.role in ("komendant", "superadmin"):
         return True
@@ -753,16 +766,26 @@ def root():
 @limiter.limit("10 per minute")
 def login():
     if request.method == "POST":
-        email = request.form["email"].strip().lower()
+        raw = (request.form.get("login") or request.form.get("email") or "").strip()
         password = request.form["password"]
-        user = User.query.filter_by(email=email).first()
+        kind, value = parse_login_identifier(raw)
+        if kind is None:
+            if raw and "@" not in raw:
+                flash("Telefon formatı +994XXXXXXXXX olmalıdır.", "danger")
+            else:
+                flash("Telefon və ya email daxil edin.", "danger")
+            return render_template("login.html")
+        if kind == "email":
+            user = User.query.filter_by(email=value).first()
+        else:
+            user = User.query.filter_by(phone=value).first()
         if user and check_password_hash(user.password_hash, password):
             session.clear()
             session["user_id"] = user.id
             session["role"] = user.role
             session.pop("selected_apartment_id", None)
             return redirect(url_for("dashboard"))
-        flash("Email ve ya sifre yanlisdir.", "danger")
+        flash("Telefon/email və ya şifrə yanlışdır.", "danger")
     return render_template("login.html")
 
 
