@@ -530,23 +530,46 @@ def ensure_user_role_migration():
 
 _did_role_migration = False
 _did_money_migration = False
+_did_default_superadmin_seed = False
+
+
+def ensure_default_superadmin_seed():
+    # Ensure there is always a bootstrap superadmin in a fresh DB.
+    if User.query.filter_by(role="superadmin").first():
+        return
+    db.session.add(
+        User(
+            full_name="Admin",
+            phone="+000000",
+            email="admin@emtk.itg.az",
+            password_hash=generate_password_hash("admin"),
+            role="superadmin",
+        )
+    )
+    db.session.commit()
 
 
 @app.before_request
 def _run_role_migration_once():
     global _did_role_migration
     global _did_money_migration
+    global _did_default_superadmin_seed
     if not _did_money_migration:
         try:
             ensure_money_numeric_schema()
         finally:
             _did_money_migration = True
-    if _did_role_migration:
+    if not _did_role_migration:
+        try:
+            ensure_user_role_migration()
+        finally:
+            _did_role_migration = True
+    if _did_default_superadmin_seed:
         return
     try:
-        ensure_user_role_migration()
+        ensure_default_superadmin_seed()
     finally:
-        _did_role_migration = True
+        _did_default_superadmin_seed = True
 
 
 def ensure_expense_schema():
@@ -2207,10 +2230,10 @@ def init_data():
     ensure_money_numeric_schema()
     if User.query.count() == 0:
         superadmin = User(
-            full_name="Суперадмин",
+            full_name="Admin",
             phone="+000000",
-            email="admin@smartzhk.local",
-            password_hash=generate_password_hash("admin123"),
+            email="admin@emtk.itg.az",
+            password_hash=generate_password_hash("admin"),
             role="superadmin",
         )
         komendant = User(
@@ -2256,6 +2279,7 @@ if __name__ == "__main__":
         ensure_balance_schema()
         ensure_tariff_scope_schema()
         ensure_user_role_migration()
+        ensure_default_superadmin_seed()
         get_smtp_config()
     host = os.getenv("FLASK_HOST", "0.0.0.0")
     port = int(os.getenv("FLASK_PORT", "5000"))
