@@ -21,6 +21,7 @@
                     {% if session.get('role') in ['komendant', 'superadmin'] %}
                     <a class="btn btn-sm btn-outline-light" href="{{ url_for('admin_settings') }}">Tənzimləmələr</a>
                     {% endif %}
+                    <a class="btn btn-sm btn-outline-light" href="{{ url_for('change_password') }}">Şifrə</a>
                     <form method="post" action="{{ url_for('logout') }}" class="d-inline">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button class="btn btn-sm btn-outline-light" type="submit">Çıxış</button>

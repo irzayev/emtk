@@ -826,6 +826,31 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.route("/change-password", methods=["GET", "POST"])
+@login_required
+def change_password():
+    user = current_user()
+    if request.method == "POST":
+        current_pw = request.form.get("current_password", "")
+        new_pw = request.form.get("new_password", "")
+        confirm_pw = request.form.get("confirm_password", "")
+        if not check_password_hash(user.password_hash, current_pw):
+            flash("Mövcud şifrə yanlışdır.", "danger")
+            return render_template("change_password.html")
+        if len(new_pw) < 6:
+            flash("Yeni şifrə ən az 6 simvol olmalıdır.", "danger")
+            return render_template("change_password.html")
+        if new_pw != confirm_pw:
+            flash("Yeni şifrələr uyğun gəlmir.", "danger")
+            return render_template("change_password.html")
+        user.password_hash = generate_password_hash(new_pw)
+        db.session.commit()
+        audit("Şifrə dəyişdirildi")
+        flash("Şifrə uğurla dəyişdirildi.", "success")
+        return redirect(url_for("dashboard"))
+    return render_template("change_password.html")
+
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
