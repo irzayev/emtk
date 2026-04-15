@@ -2,6 +2,7 @@ import os
 import re
 import smtplib
 import uuid
+from decimal import Decimal
 from datetime import date, datetime
 from email.message import EmailMessage
 from functools import wraps
@@ -73,14 +74,14 @@ class Apartment(db.Model):
     area = db.Column(db.Float, nullable=False)
     owner_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     owner = db.relationship("User", backref="apartments")
-    credit_balance = db.Column(db.Float, nullable=False, default=0)
+    credit_balance = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
 
 
 class Tariff(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     type = db.Column(db.String(20), nullable=False)  # per_m2 | fixed
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
 
 
@@ -97,8 +98,8 @@ class Invoice(db.Model):
     apartment_id = db.Column(db.Integer, db.ForeignKey("apartment.id"), nullable=False)
     apartment = db.relationship("Apartment", backref="invoices")
     period = db.Column(db.String(7), nullable=False)  # YYYY-MM
-    amount = db.Column(db.Float, nullable=False)
-    paid_amount = db.Column(db.Float, nullable=False, default=0)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    paid_amount = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     status = db.Column(db.String(20), nullable=False, default="gozlemede")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -107,7 +108,7 @@ class Payment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     invoice_id = db.Column(db.Integer, db.ForeignKey("invoice.id"), nullable=False)
     invoice = db.relationship("Invoice", backref="payments")
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
     comment = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(20), nullable=False, default="pending")  # pending | confirmed | rejected
     reviewer_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
@@ -171,7 +172,7 @@ class AuditLog(db.Model):
 class ExpenseTemplate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
-    default_amount = db.Column(db.Float, nullable=False, default=0)
+    default_amount = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     is_recurring = db.Column(db.Boolean, nullable=False, default=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -181,7 +182,7 @@ class Expense(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     period = db.Column(db.String(7), nullable=False)  # YYYY-MM
     name = db.Column(db.String(120), nullable=False)
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
     is_paid = db.Column(db.Boolean, nullable=False, default=False)
     paid_at = db.Column(db.DateTime, nullable=True)
     template_id = db.Column(db.Integer, db.ForeignKey("expense_template.id"), nullable=True)
@@ -192,7 +193,7 @@ class Expense(db.Model):
 
 class BalanceTopUp(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
     comment = db.Column(db.String(255), nullable=True)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -330,7 +331,181 @@ def ensure_apartment_schema():
     with db.engine.connect() as conn:
         columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(apartment)")}
         if "credit_balance" not in columns:
-            conn.exec_driver_sql("ALTER TABLE apartment ADD COLUMN credit_balance FLOAT NOT NULL DEFAULT 0")
+            conn.exec_driver_sql("ALTER TABLE apartment ADD COLUMN credit_balance NUMERIC NOT NULL DEFAULT 0")
+
+
+def ensure_money_numeric_schema():
+    """
+    SQLite migration: rebuild tables so monetary fields use NUMERIC instead of FLOAT/REAL.
+    Existing values are preserved via CAST(... AS NUMERIC).
+    """
+    with db.engine.begin() as conn:
+        dialect = conn.dialect.name
+        if dialect != "sqlite":
+            return
+
+        table_defs = {
+            "apartment": {
+                "money_columns": {"credit_balance"},
+                "create_sql": """
+                    CREATE TABLE apartment_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        number VARCHAR(20) NOT NULL UNIQUE,
+                        floor INTEGER NOT NULL,
+                        area FLOAT NOT NULL,
+                        owner_user_id INTEGER NOT NULL,
+                        credit_balance NUMERIC(12,2) NOT NULL DEFAULT 0,
+                        FOREIGN KEY(owner_user_id) REFERENCES user (id)
+                    )
+                """,
+                "copy_sql": """
+                    INSERT INTO apartment_new (id, number, floor, area, owner_user_id, credit_balance)
+                    SELECT id, number, floor, area, owner_user_id, CAST(credit_balance AS NUMERIC)
+                    FROM apartment
+                """,
+            },
+            "tariff": {
+                "money_columns": {"amount"},
+                "create_sql": """
+                    CREATE TABLE tariff_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        name VARCHAR(120) NOT NULL,
+                        type VARCHAR(20) NOT NULL,
+                        amount NUMERIC(12,2) NOT NULL,
+                        is_active BOOLEAN NOT NULL
+                    )
+                """,
+                "copy_sql": """
+                    INSERT INTO tariff_new (id, name, type, amount, is_active)
+                    SELECT id, name, type, CAST(amount AS NUMERIC), is_active
+                    FROM tariff
+                """,
+            },
+            "invoice": {
+                "money_columns": {"amount", "paid_amount"},
+                "create_sql": """
+                    CREATE TABLE invoice_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        apartment_id INTEGER NOT NULL,
+                        period VARCHAR(7) NOT NULL,
+                        amount NUMERIC(12,2) NOT NULL,
+                        paid_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+                        status VARCHAR(20) NOT NULL,
+                        created_at DATETIME,
+                        FOREIGN KEY(apartment_id) REFERENCES apartment (id)
+                    )
+                """,
+                "copy_sql": """
+                    INSERT INTO invoice_new (id, apartment_id, period, amount, paid_amount, status, created_at)
+                    SELECT id, apartment_id, period, CAST(amount AS NUMERIC), CAST(paid_amount AS NUMERIC), status, created_at
+                    FROM invoice
+                """,
+            },
+            "payment": {
+                "money_columns": {"amount"},
+                "create_sql": """
+                    CREATE TABLE payment_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        invoice_id INTEGER NOT NULL,
+                        amount NUMERIC(12,2) NOT NULL,
+                        comment VARCHAR(255),
+                        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                        reviewer_user_id INTEGER,
+                        reviewed_at DATETIME,
+                        created_at DATETIME,
+                        FOREIGN KEY(invoice_id) REFERENCES invoice (id),
+                        FOREIGN KEY(reviewer_user_id) REFERENCES user (id)
+                    )
+                """,
+                "copy_sql": """
+                    INSERT INTO payment_new (id, invoice_id, amount, comment, status, reviewer_user_id, reviewed_at, created_at)
+                    SELECT id, invoice_id, CAST(amount AS NUMERIC), comment, status, reviewer_user_id, reviewed_at, created_at
+                    FROM payment
+                """,
+            },
+            "expense_template": {
+                "money_columns": {"default_amount"},
+                "create_sql": """
+                    CREATE TABLE expense_template_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        name VARCHAR(120) NOT NULL,
+                        default_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+                        is_recurring BOOLEAN NOT NULL,
+                        is_active BOOLEAN NOT NULL,
+                        created_at DATETIME
+                    )
+                """,
+                "copy_sql": """
+                    INSERT INTO expense_template_new (id, name, default_amount, is_recurring, is_active, created_at)
+                    SELECT id, name, CAST(default_amount AS NUMERIC), is_recurring, is_active, created_at
+                    FROM expense_template
+                """,
+            },
+            "expense": {
+                "money_columns": {"amount"},
+                "create_sql": """
+                    CREATE TABLE expense_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        period VARCHAR(7) NOT NULL,
+                        name VARCHAR(120) NOT NULL,
+                        amount NUMERIC(12,2) NOT NULL,
+                        is_paid BOOLEAN NOT NULL DEFAULT 0,
+                        paid_at DATETIME,
+                        template_id INTEGER,
+                        created_by_user_id INTEGER,
+                        created_at DATETIME,
+                        FOREIGN KEY(template_id) REFERENCES expense_template (id),
+                        FOREIGN KEY(created_by_user_id) REFERENCES user (id)
+                    )
+                """,
+                "copy_sql": """
+                    INSERT INTO expense_new (id, period, name, amount, is_paid, paid_at, template_id, created_by_user_id, created_at)
+                    SELECT id, period, name, CAST(amount AS NUMERIC), is_paid, paid_at, template_id, created_by_user_id, created_at
+                    FROM expense
+                """,
+            },
+            "balance_top_up": {
+                "money_columns": {"amount"},
+                "create_sql": """
+                    CREATE TABLE balance_top_up_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        amount NUMERIC(12,2) NOT NULL,
+                        comment VARCHAR(255),
+                        created_by_user_id INTEGER,
+                        created_at DATETIME,
+                        FOREIGN KEY(created_by_user_id) REFERENCES user (id)
+                    )
+                """,
+                "copy_sql": """
+                    INSERT INTO balance_top_up_new (id, amount, comment, created_by_user_id, created_at)
+                    SELECT id, CAST(amount AS NUMERIC), comment, created_by_user_id, created_at
+                    FROM balance_top_up
+                """,
+            },
+        }
+
+        conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        try:
+            tables = {row[0] for row in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'")}
+            for table_name, cfg in table_defs.items():
+                if table_name not in tables:
+                    continue
+
+                pragma_rows = conn.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()
+                col_type = {row[1]: str(row[2] or "").upper() for row in pragma_rows}
+                needs_rebuild = any(
+                    ("FLOAT" in col_type.get(col, "") or "REAL" in col_type.get(col, ""))
+                    for col in cfg["money_columns"]
+                )
+                if not needs_rebuild:
+                    continue
+
+                conn.exec_driver_sql(cfg["create_sql"])
+                conn.exec_driver_sql(cfg["copy_sql"])
+                conn.exec_driver_sql(f"DROP TABLE {table_name}")
+                conn.exec_driver_sql(f"ALTER TABLE {table_name}_new RENAME TO {table_name}")
+        finally:
+            conn.exec_driver_sql("PRAGMA foreign_keys=ON")
 
 
 def ensure_system_schema():
@@ -354,11 +529,18 @@ def ensure_user_role_migration():
 
 
 _did_role_migration = False
+_did_money_migration = False
 
 
 @app.before_request
 def _run_role_migration_once():
     global _did_role_migration
+    global _did_money_migration
+    if not _did_money_migration:
+        try:
+            ensure_money_numeric_schema()
+        finally:
+            _did_money_migration = True
     if _did_role_migration:
         return
     try:
@@ -404,7 +586,8 @@ def compute_invoice_amount(apartment, active_tariffs, scope_map):
         scope = scope_map.get(t.id)
         if scope is not None and apartment.id not in scope:
             continue
-        total += t.amount * apartment.area if t.type == "per_m2" else t.amount
+        tariff_amount = float(t.amount or 0)
+        total += tariff_amount * float(apartment.area or 0) if t.type == "per_m2" else tariff_amount
     return round(total, 2)
 
 
@@ -610,7 +793,7 @@ def dashboard():
         # contribution that incorrectly reduces the total debt figure.
         base_debt = sum(max(0.0, float(i.amount) - float(i.paid_amount)) for i in invoices)
         credit_balance = float(apartment.credit_balance or 0) if apartment else 0.0
-        debt = round(base_debt - credit_balance, 2)
+        debt = max(0.0, round(base_debt - credit_balance, 2))
 
         # Building-wide metrics (read-only for residents).
         # Use the same db.case guard as the admin dashboard to avoid negative
@@ -831,8 +1014,9 @@ def admin_apartments():
 
     apartments = Apartment.query.order_by(Apartment.number).all()
     residents = User.query.filter_by(role="resident").all()
+    debt_expr = db.case((Invoice.amount - Invoice.paid_amount > 0, Invoice.amount - Invoice.paid_amount), else_=0.0)
     debt_rows = (
-        db.session.query(Invoice.apartment_id, db.func.sum(Invoice.amount - Invoice.paid_amount))
+        db.session.query(Invoice.apartment_id, db.func.sum(debt_expr))
         .group_by(Invoice.apartment_id)
         .all()
     )
@@ -841,7 +1025,7 @@ def admin_apartments():
     for a in apartments:
         inv_bal = float(inv_balance_by_apartment_id.get(a.id, 0) or 0)
         credit = float(a.credit_balance or 0)
-        debt_by_apartment_id[a.id] = round(inv_bal - credit, 2)
+        debt_by_apartment_id[a.id] = max(0.0, round(inv_bal - credit, 2))
     return render_template(
         "admin_apartments.html",
         apartments=apartments,
@@ -1858,11 +2042,41 @@ def admin_settings():
     return render_template("admin_settings.html", cfg=cfg)
 
 
+@app.route("/admin/health/money-schema")
+@login_required
+@role_required("superadmin", "komendant")
+def admin_health_money_schema():
+    expected = {
+        "apartment": {"credit_balance"},
+        "tariff": {"amount"},
+        "invoice": {"amount", "paid_amount"},
+        "payment": {"amount"},
+        "expense_template": {"default_amount"},
+        "expense": {"amount"},
+        "balance_top_up": {"amount"},
+    }
+    result = {"ok": True, "tables": {}}
+    with db.engine.connect() as conn:
+        for table_name, money_columns in expected.items():
+            pragma_rows = conn.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()
+            col_type = {row[1]: str(row[2] or "").upper() for row in pragma_rows}
+            table_info = {}
+            for column in sorted(money_columns):
+                actual = col_type.get(column, "")
+                is_numeric = "NUMERIC" in actual
+                table_info[column] = {"actual_type": actual, "is_numeric": is_numeric}
+                if not is_numeric:
+                    result["ok"] = False
+            result["tables"][table_name] = table_info
+    return result
+
+
 @app.route("/init")
 def init_data():
     if os.getenv("ENABLE_INIT_ROUTE", "0") != "1":
         abort(404)
     db.create_all()
+    ensure_money_numeric_schema()
     if User.query.count() == 0:
         superadmin = User(
             full_name="Суперадмин",
@@ -1905,6 +2119,7 @@ def init_data():
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
+        ensure_money_numeric_schema()
         ensure_poll_schema()
         ensure_payment_schema()
         ensure_apartment_schema()
