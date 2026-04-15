@@ -5,6 +5,10 @@ body {
     flex-direction: column;
 }
 
+.bg-primary {
+    background-color: #0159a4 !important;
+}
+
 main.container {
     flex: 1;
 }
