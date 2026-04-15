@@ -33,7 +33,7 @@
                                 <span class="text-muted">{{ 0|azn }}</span>
                             {% endif %}
                         </td>
-                        <td><span class="badge bg-{{ 'success' if computed_status == 'odenilib' else 'warning' }}">{{ computed_status }}</span></td>
+                        <td><span class="badge bg-{{ 'success' if computed_status == 'ödənilib' else 'warning' }}">{{ computed_status }}</span></td>
                         <td style="min-width: 240px;">
                             <form method="post" action="{{ url_for('add_payment', invoice_id=i.id) }}" class="row g-2 align-items-end">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
