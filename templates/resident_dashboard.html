@@ -54,7 +54,13 @@
         <div class="card metric-card border-0 shadow-sm">
             <div class="card-body">
                 <div class="text-muted small">Ümumi balans (bina)</div>
-                <div class="h5 mb-0 {{ 'text-success' if house_balance >= 0 else 'text-danger' }}">{{ house_balance|azn }}</div>
+                {% if house_balance > 0 %}
+                    <div class="h5 mb-0 text-success">+{{ house_balance|azn }}</div>
+                {% elif house_balance < 0 %}
+                    <div class="h5 mb-0 text-danger">{{ house_balance|azn }}</div>
+                {% else %}
+                    <div class="h5 mb-0 text-muted">{{ house_balance|azn }}</div>
+                {% endif %}
             </div>
         </div>
     </div>
