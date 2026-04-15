@@ -241,24 +241,33 @@ def _apply_payment_delta(invoice: "Invoice", delta: float) -> dict:
     """
     Apply a payment delta to an invoice/apartment.
     Positive delta increases paid; negative delta is a correction (decrease).
-    Returns dict with keys: applied_to_invoice, moved_to_credit, removed_from_credit.
+    Returns dict with keys: moved_to_credit, removed_from_credit.
+
+    FIX: removed the misleading `applied_to_invoice` field whose formula was
+    incorrect for negative deltas. Callers only use moved_to_credit /
+    removed_from_credit for audit messages, so those two fields are enough.
     """
     apt = invoice.apartment
     if not apt:
-        invoice.paid_amount = round(float(invoice.paid_amount or 0) + float(delta), 2)
-        invoice.paid_amount = max(0.0, invoice.paid_amount)
+        # No apartment linked — just update paid_amount directly.
+        invoice.paid_amount = max(0.0, round(float(invoice.paid_amount or 0) + float(delta), 2))
         invoice.status = "odenilib" if float(invoice.paid_amount or 0) >= float(invoice.amount or 0) else "gozlemede"
-        return {"applied_to_invoice": round(delta, 2), "moved_to_credit": 0.0, "removed_from_credit": 0.0}
+        return {"moved_to_credit": 0.0, "removed_from_credit": 0.0}
 
     delta = float(delta or 0)
     moved_to_credit = 0.0
     removed_from_credit = 0.0
 
     if delta >= 0:
+        # Payment: add to paid_amount, then push any overflow into apartment credit.
         invoice.paid_amount = round(float(invoice.paid_amount or 0) + delta, 2)
         moved_to_credit = _move_invoice_overpay_to_credit(invoice)
     else:
-        need = -delta
+        # Correction / reversal: reduce paid_amount.
+        # Strategy: first try to recover from apartment credit (so the credit
+        # pool shrinks rather than paid_amount going negative), then reduce
+        # paid_amount for whatever remains.
+        need = -delta  # positive amount we need to subtract
         credit = float(apt.credit_balance or 0)
         take_credit = min(credit, need)
         if take_credit > 0:
@@ -267,14 +276,11 @@ def _apply_payment_delta(invoice: "Invoice", delta: float) -> dict:
             need -= take_credit
 
         if need > 0:
-            invoice.paid_amount = round(float(invoice.paid_amount or 0) - need, 2)
-            if invoice.paid_amount < 0:
-                invoice.paid_amount = 0.0
+            invoice.paid_amount = max(0.0, round(float(invoice.paid_amount or 0) - need, 2))
+
         invoice.status = "odenilib" if float(invoice.paid_amount or 0) >= float(invoice.amount or 0) else "gozlemede"
 
-    applied_to_invoice = round(float(delta) + float(removed_from_credit) - float(moved_to_credit), 2)
     return {
-        "applied_to_invoice": applied_to_invoice,
         "moved_to_credit": round(float(moved_to_credit or 0), 2),
         "removed_from_credit": round(float(removed_from_credit or 0), 2),
     }
@@ -598,11 +604,17 @@ def dashboard():
     if user.role == "resident":
         apartment, apartments = get_selected_apartment(user)
         invoices = Invoice.query.filter_by(apartment_id=apartment.id).order_by(Invoice.created_at.desc()).all() if apartment else []
-        # For resident view we show both debt and credit (overpayment).
-        base_debt = sum((i.amount - i.paid_amount) for i in invoices)
+
+        # FIX #3: Use max(0, ...) per invoice before summing so that overpaid
+        # invoices (where paid_amount > amount) do not produce a negative
+        # contribution that incorrectly reduces the total debt figure.
+        base_debt = sum(max(0.0, float(i.amount) - float(i.paid_amount)) for i in invoices)
         credit_balance = float(apartment.credit_balance or 0) if apartment else 0.0
-        debt = round(float(base_debt) - credit_balance, 2)
+        debt = round(base_debt - credit_balance, 2)
+
         # Building-wide metrics (read-only for residents).
+        # Use the same db.case guard as the admin dashboard to avoid negative
+        # per-invoice contributions in the SQL aggregate (consistent formula).
         debt_expr = db.case((Invoice.amount - Invoice.paid_amount > 0, Invoice.amount - Invoice.paid_amount), else_=0.0)
         house_total_debt = db.session.query(db.func.sum(debt_expr)).scalar() or 0
         house_credit_total = db.session.query(db.func.sum(Apartment.credit_balance)).scalar() or 0
@@ -954,20 +966,22 @@ def generate_invoices():
 
     db.session.commit()
 
-    # Auto-apply apartment credit to newly created invoices.
-    if created:
-        new_invoices = (
-            Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
-            .filter(Invoice.period == period)
-            .order_by(Apartment.number.asc(), Invoice.id.asc())
-            .all()
-        )
-        applied_total = 0.0
-        for inv in new_invoices:
-            applied_total += _apply_credit_to_invoice(inv)
-        if applied_total > 0:
-            db.session.commit()
-            audit(f"Kredit avtomatik tetbiq olundu: {applied_total:.2f} AZN period {period}")
+    # FIX #2: Apply apartment credit to ALL unpaid invoices for this period,
+    # not only when new invoices were just created. This ensures credit is
+    # applied even on repeated calls to generate_invoices, and also covers
+    # the case where credit accumulated after the invoice was first created.
+    unpaid_invoices = (
+        Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
+        .filter(Invoice.period == period, Invoice.status != "odenilib")
+        .order_by(Apartment.number.asc(), Invoice.id.asc())
+        .all()
+    )
+    applied_total = 0.0
+    for inv in unpaid_invoices:
+        applied_total += _apply_credit_to_invoice(inv)
+    if applied_total > 0:
+        db.session.commit()
+        audit(f"Kredit avtomatik tetbiq olundu: {applied_total:.2f} AZN period {period}")
 
     templates = ExpenseTemplate.query.filter_by(is_active=True, is_recurring=True).all()
     created_exp = 0
@@ -1032,6 +1046,22 @@ def recalculate_invoices():
         updated += 1
 
     db.session.commit()
+
+    # FIX (warning #3): After recalculating amounts, apply any accumulated
+    # apartment credit to unpaid invoices in this period. Previously the
+    # credit was left untouched even if the new amount could be fully or
+    # partially covered by it.
+    unpaid_invoices = (
+        Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
+        .filter(Invoice.period == period, Invoice.status != "odenilib")
+        .order_by(Apartment.number.asc(), Invoice.id.asc())
+        .all()
+    )
+    applied_total = sum(_apply_credit_to_invoice(inv) for inv in unpaid_invoices)
+    if applied_total > 0:
+        db.session.commit()
+        audit(f"Kredit avtomatik tetbiq olundu (yeniden hesabla): {applied_total:.2f} AZN period {period}")
+
     audit(f"Hesablar yeniden hesablandi period {period}: updated {updated}, created {created}")
     flash(f"Yeniden hesablandi: {updated}, yaradildi: {created}.", "success")
     return redirect(url_for("admin_invoices"))
@@ -1185,11 +1215,21 @@ def confirm_payment(payment_id):
 
     invoice = payment.invoice
     apply_amount = float(payment.amount)
-    result = _apply_payment_delta(invoice, apply_amount)
-    payment.status = "confirmed"
-    payment.reviewer_user_id = current_user().id
-    payment.reviewed_at = datetime.utcnow()
-    db.session.commit()
+
+    # FIX (warning #1): wrap the mutable operations and the status change in a
+    # try/except so that a mid-flight exception cannot leave the in-memory
+    # objects mutated without a matching DB commit.
+    try:
+        result = _apply_payment_delta(invoice, apply_amount)
+        payment.status = "confirmed"
+        payment.reviewer_user_id = current_user().id
+        payment.reviewed_at = datetime.utcnow()
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        flash("Xəta baş verdi. Ödəniş təsdiqlənmədi.", "danger")
+        return redirect(url_for("admin_invoices"))
+
     moved = float(result.get("moved_to_credit") or 0)
     removed = float(result.get("removed_from_credit") or 0)
     if moved > 0:
@@ -1237,19 +1277,27 @@ def add_payment(invoice_id):
 
     apply_amount = amount
     now = datetime.utcnow()
-    result = _apply_payment_delta(invoice, apply_amount)
-    db.session.add(
-        Payment(
-            invoice_id=invoice.id,
-            amount=apply_amount,
-            comment=comment,
-            status="confirmed",
-            reviewer_user_id=current_user().id,
-            reviewed_at=now,
-            created_at=now,
+
+    # FIX (warning #1): same try/except guard as confirm_payment.
+    try:
+        result = _apply_payment_delta(invoice, apply_amount)
+        db.session.add(
+            Payment(
+                invoice_id=invoice.id,
+                amount=apply_amount,
+                comment=comment,
+                status="confirmed",
+                reviewer_user_id=current_user().id,
+                reviewed_at=now,
+                created_at=now,
+            )
         )
-    )
-    db.session.commit()
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        flash("Xəta baş verdi. Ödəniş daxil edilmədi.", "danger")
+        return redirect(url_for("admin_invoices"))
+
     moved = float(result.get("moved_to_credit") or 0)
     removed = float(result.get("removed_from_credit") or 0)
     if moved > 0:
