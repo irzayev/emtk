@@ -2,9 +2,13 @@
 {% block content %}
 <div class="d-flex justify-content-between mb-3">
     <h3>Hesablar</h3>
-    <form method="post" action="{{ url_for('generate_invoices') }}">
+    <form method="post" action="{{ url_for('generate_invoices') }}" class="d-flex gap-2">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-primary btn-sm" type="submit">Cari ay üçün yarat</button>
+        <select class="form-select form-select-sm" name="period_mode">
+            <option value="current" selected>Cari ay</option>
+            <option value="next">Növbəti ay (cari + növbəti)</option>
+        </select>
+        <button class="btn btn-primary btn-sm" type="submit">Yarat</button>
     </form>
 </div>
 <div class="card border-0 shadow-sm">

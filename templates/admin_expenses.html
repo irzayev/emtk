@@ -9,41 +9,76 @@
 </div>
 
 <div class="row g-3">
-    <div class="col-lg-5">
+    <div class="col-12">
         <div class="card border-0 shadow-sm">
             <div class="card-body">
-                <h5 class="mb-3">Sabit (şablon) xərclər</h5>
-                <form method="post" class="row g-2 mb-3">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="form_type" value="add_template">
-                    <div class="col-12">
-                        <label class="form-label">Ad</label>
-                        <input class="form-control" name="name" placeholder="Məs: Maaş, Elektrik, Su, Zibil" required>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Aylıq məbləğ</label>
-                        <input class="form-control" type="number" step="0.01" min="0" max="9999" name="default_amount" placeholder="0.00">
-                    </div>
-                    <div class="col-6 d-flex align-items-end">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="is_recurring" checked>
-                            <label class="form-check-label">Hər ay</label>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="mb-0">Xərc idarəetməsi ({{ period }})</h5>
+                    <div class="fw-semibold text-danger">Cəmi: {{ expenses_total|azn }}</div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-lg-6">
+                        <div class="border rounded p-3 h-100">
+                            <h6 class="mb-3">Sabit (şablon) xərc əlavə et</h6>
+                            <form method="post" class="row g-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="form_type" value="add_template">
+                                <div class="col-12">
+                                    <label class="form-label">Ad</label>
+                                    <input class="form-control" name="name" placeholder="Məs: Maaş, Elektrik, Su, Zibil" required>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Aylıq məbləğ</label>
+                                    <input class="form-control" type="number" step="0.01" min="0" max="9999" name="default_amount" placeholder="0.00">
+                                </div>
+                                <div class="col-6 d-flex align-items-end">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="is_recurring" checked>
+                                        <label class="form-check-label">Hər ay</label>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <button class="btn btn-primary w-100">Əlavə et</button>
+                                </div>
+                            </form>
                         </div>
                     </div>
-                    <div class="col-12">
-                        <button class="btn btn-primary w-100">Elave et</button>
+                    <div class="col-lg-6">
+                        <div class="border rounded p-3 h-100">
+                            <h6 class="mb-3">Birdəfəlik / dinamik xərc əlavə et</h6>
+                            <form method="post" class="row g-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="form_type" value="add_expense">
+                                <div class="col-md-4">
+                                    <label class="form-label">Period</label>
+                                    <input class="form-control js-monthpicker" name="period" value="{{ period }}" placeholder="YYYY-MM" required>
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label">Ad</label>
+                                    <input class="form-control" name="name" placeholder="Məs: Zibil hesabı, təmir" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Məbləğ</label>
+                                    <input class="form-control" type="number" step="0.01" min="0.01" max="9999" name="amount" required>
+                                </div>
+                                <div class="col-12">
+                                    <button class="btn btn-success w-100">Daxil et</button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
-                </form>
+                </div>
 
-                <div class="table-responsive">
+                <div class="table-responsive mb-3">
                     <table class="table align-middle">
-                        <thead><tr><th>Ad</th><th>Məbləğ</th><th>Hər ay</th><th>Status</th><th>Ödəniş ({{ period }})</th><th></th></tr></thead>
+                        <thead><tr><th>Şablon</th><th>Məbləğ</th><th>Hər ay</th><th>Status</th><th>Ödəniş ({{ period }})</th><th></th></tr></thead>
                         <tbody>
                         {% for t in templates %}
                             <tr>
                                 <td>{{ t.name }}</td>
                                 <td>{{ (t.default_amount or 0)|azn }}</td>
-                                <td>{{ 'Beli' if t.is_recurring else 'Xeyr' }}</td>
+                                <td>{{ 'Bəli' if t.is_recurring else 'Xeyr' }}</td>
                                 <td>
                                     <span class="badge bg-{{ 'success' if t.is_active else 'secondary' }}">{{ 'Aktiv' if t.is_active else 'Passiv' }}</span>
                                 </td>
@@ -78,53 +113,26 @@
                                 </td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="6" class="text-muted">Sablon yoxdur.</td></tr>
+                            <tr><td colspan="6" class="text-muted">Şablon yoxdur.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
                 </div>
-                <div class="small text-muted">
-                    Qeyd: “Hesabları yarat” seçildikdə, aktiv “Hər ay” şablonları cari ayın xərclərinə əlavə olunur.
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-lg-7">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h5 class="mb-0">Dinamik xərclər ({{ period }})</h5>
-                    <div class="fw-semibold text-danger">Cemi: {{ expenses_total|azn }}</div>
-                </div>
-
-                <form method="post" class="row g-2 mb-3">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="form_type" value="add_expense">
-                    <div class="col-md-3">
-                        <label class="form-label">Period</label>
-                        <input class="form-control js-monthpicker" name="period" value="{{ period }}" placeholder="YYYY-MM" required>
-                    </div>
-                    <div class="col-md-5">
-                        <label class="form-label">Ad</label>
-                        <input class="form-control" name="name" placeholder="Məs: Elektrik (fakt), Su (fakt)" required>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Məbləğ</label>
-                        <input class="form-control" type="number" step="0.01" min="0.01" max="9999" name="amount" required>
-                    </div>
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button class="btn btn-success w-100">Daxil</button>
-                    </div>
-                </form>
 
                 <div class="table-responsive">
                     <table class="table">
-                        <thead><tr><th>Tarix</th><th>Ad</th><th>Məbləğ</th><th>Status</th><th></th></tr></thead>
+                        <thead><tr><th>Tarix</th><th>Tip</th><th>Ad</th><th>Məbləğ</th><th>Status</th><th></th></tr></thead>
                         <tbody>
                         {% for e in expenses %}
                             <tr>
                                 <td class="text-muted small">{{ e.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                                <td>
+                                    {% if e.template_id %}
+                                        <span class="badge bg-primary-subtle text-primary">Sabit</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary">Birdəfəlik</span>
+                                    {% endif %}
+                                </td>
                                 <td>{{ e.name }}</td>
                                 <td class="text-danger fw-semibold">{{ e.amount|azn }}</td>
                                 <td>
@@ -149,7 +157,7 @@
                                 </td>
                             </tr>
                             <tr class="collapse" id="edit-expense-{{ e.id }}">
-                                <td colspan="5" class="bg-light">
+                                <td colspan="6" class="bg-light">
                                     <form method="post" action="{{ url_for('update_expense', expense_id=e.id) }}" class="row g-2 align-items-end">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <div class="col-md-3">
@@ -171,13 +179,13 @@
                                 </td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="5" class="text-muted">Xerc yoxdur.</td></tr>
+                            <tr><td colspan="6" class="text-muted">Xərc yoxdur.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
                 </div>
                 <div class="small text-muted">
-                    Bu xərclər ümumi balansdan çıxılır (mənzillər arasında bölünmür).
+                    Sabit və birdəfəlik xərclər bir yerdə idarə olunur. Sabit şablonlar “Hesabları yarat” zamanı cari aya düşür, birdəfəlik xərclər isə əl ilə əlavə olunur.
                 </div>
             </div>
         </div>

@@ -1130,70 +1130,91 @@ def delete_tariff(tariff_id):
 @login_required
 @role_required("komendant", "superadmin")
 def generate_invoices():
-    period = date.today().strftime("%Y-%m")
+    period_mode = (request.form.get("period_mode") or "current").strip().lower()
+    today = date.today()
+    current_period = today.strftime("%Y-%m")
+    next_period = f"{(today.year + (1 if today.month == 12 else 0)):04d}-{(1 if today.month == 12 else today.month + 1):02d}"
+    periods_to_generate = [current_period] if period_mode != "next" else [current_period, next_period]
+
     active_tariffs = Tariff.query.filter_by(is_active=True).all()
     apartments = Apartment.query.all()
-    created = 0
-
     scope_rows = TariffApartment.query.all()
     scope_map = {}
     for r in scope_rows:
         scope_map.setdefault(r.tariff_id, set()).add(r.apartment_id)
 
-    for apartment in apartments:
-        exists = Invoice.query.filter_by(apartment_id=apartment.id, period=period).first()
-        if exists:
-            continue
-        total = compute_invoice_amount(apartment, active_tariffs, scope_map)
-        db.session.add(Invoice(apartment_id=apartment.id, period=period, amount=total, status="gozlemede"))
-        created += 1
+    created_by_period = {}
+    credit_applied_by_period = {}
 
-    db.session.commit()
-
-    # FIX #2: Apply apartment credit to ALL unpaid invoices for this period,
-    # not only when new invoices were just created. This ensures credit is
-    # applied even on repeated calls to generate_invoices, and also covers
-    # the case where credit accumulated after the invoice was first created.
-    unpaid_invoices = (
-        Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
-        .filter(Invoice.period == period, Invoice.status != "odenilib")
-        .order_by(Apartment.number.asc(), Invoice.id.asc())
-        .all()
-    )
-    applied_total = 0.0
-    for inv in unpaid_invoices:
-        applied_total += _apply_credit_to_invoice(inv)
-    if applied_total > 0:
+    for period in periods_to_generate:
+        created = 0
+        for apartment in apartments:
+            exists = Invoice.query.filter_by(apartment_id=apartment.id, period=period).first()
+            if exists:
+                continue
+            total = compute_invoice_amount(apartment, active_tariffs, scope_map)
+            db.session.add(Invoice(apartment_id=apartment.id, period=period, amount=total, status="gozlemede"))
+            created += 1
         db.session.commit()
-        audit(f"Kredit avtomatik tetbiq olundu: {applied_total:.2f} AZN period {period}")
+        created_by_period[period] = created
 
-    templates = ExpenseTemplate.query.filter_by(is_active=True, is_recurring=True).all()
-    created_exp = 0
-    for t in templates:
-        exists = Expense.query.filter_by(period=period, template_id=t.id).first()
-        if exists:
-            continue
-        amount = float(t.default_amount or 0)
-        if amount <= 0:
-            continue
-        db.session.add(
-            Expense(
-                period=period,
-                name=t.name,
-                amount=round(amount, 2),
-                is_paid=False,
-                paid_at=None,
-                template_id=t.id,
-                created_by_user_id=current_user().id,
-            )
+        # Apply apartment credit to all unpaid invoices for the period.
+        unpaid_invoices = (
+            Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
+            .filter(Invoice.period == period, Invoice.status != "odenilib")
+            .order_by(Apartment.number.asc(), Invoice.id.asc())
+            .all()
         )
-        created_exp += 1
-    if created_exp:
-        db.session.commit()
-        audit(f"Aylıq xərclər yaradıldı: {created_exp} period {period}")
+        applied_total = 0.0
+        for inv in unpaid_invoices:
+            applied_total += _apply_credit_to_invoice(inv)
+        if applied_total > 0:
+            db.session.commit()
+            audit(f"Kredit avtomatik tetbiq olundu: {applied_total:.2f} AZN period {period}")
+        credit_applied_by_period[period] = round(applied_total, 2)
 
-    audit(f"Hesablar yaradildi: {created} period {period}")
-    flash(f"Hesablar yaradildi: {created} eded.", "success")
+        templates = ExpenseTemplate.query.filter_by(is_active=True, is_recurring=True).all()
+        created_exp = 0
+        for t in templates:
+            exists = Expense.query.filter_by(period=period, template_id=t.id).first()
+            if exists:
+                continue
+            amount = float(t.default_amount or 0)
+            if amount <= 0:
+                continue
+            db.session.add(
+                Expense(
+                    period=period,
+                    name=t.name,
+                    amount=round(amount, 2),
+                    is_paid=False,
+                    paid_at=None,
+                    template_id=t.id,
+                    created_by_user_id=current_user().id,
+                )
+            )
+            created_exp += 1
+        if created_exp:
+            db.session.commit()
+            audit(f"Aylıq xərclər yaradıldı: {created_exp} period {period}")
+    if len(periods_to_generate) == 2:
+        audit(
+            f"Hesablar yaradildi ardicil periodlar: {periods_to_generate[0]}={created_by_period.get(periods_to_generate[0], 0)}, "
+            f"{periods_to_generate[1]}={created_by_period.get(periods_to_generate[1], 0)}"
+        )
+        flash(
+            "Hesablar yaradildi. "
+            f"{periods_to_generate[0]}: {created_by_period.get(periods_to_generate[0], 0)} hesab, "
+            f"{periods_to_generate[1]}: {created_by_period.get(periods_to_generate[1], 0)} hesab.",
+            "success",
+        )
+    else:
+        period = periods_to_generate[0]
+        audit(f"Hesablar yaradildi: {created_by_period.get(period, 0)} period {period}")
+        flash(f"Hesablar yaradildi: {created_by_period.get(period, 0)} eded.", "success")
+
+    if any((credit_applied_by_period.get(p, 0) > 0 for p in periods_to_generate)):
+        db.session.commit()
     return redirect(url_for("admin_invoices"))
 
 
@@ -2069,6 +2090,74 @@ def admin_health_money_schema():
                     result["ok"] = False
             result["tables"][table_name] = table_info
     return result
+
+
+@app.route("/admin/health/calculation-smoke")
+@login_required
+@role_required("superadmin", "komendant")
+def admin_health_calculation_smoke():
+    """
+    Run deterministic calculation smoke-checks without DB writes.
+    """
+    checks = []
+
+    def _check(name: str, actual: float, expected: float):
+        actual_rounded = round(float(actual), 2)
+        expected_rounded = round(float(expected), 2)
+        ok = actual_rounded == expected_rounded
+        checks.append(
+            {
+                "name": name,
+                "ok": ok,
+                "actual": actual_rounded,
+                "expected": expected_rounded,
+            }
+        )
+
+    # Scenario 1: credit auto-applies to unpaid invoice.
+    apt1 = Apartment(area=80.0, credit_balance=Decimal("15.00"))
+    inv1 = Invoice(amount=Decimal("100.00"), paid_amount=Decimal("20.00"), status="gozlemede")
+    inv1.apartment = apt1
+    applied = _apply_credit_to_invoice(inv1)
+    _check("credit_applied_amount", applied, 15.00)
+    _check("credit_applied_paid_amount", inv1.paid_amount, 35.00)
+    _check("credit_applied_credit_left", apt1.credit_balance, 0.00)
+
+    # Scenario 2: payment overpay moves overflow into apartment credit.
+    apt2 = Apartment(area=60.0, credit_balance=Decimal("0.00"))
+    inv2 = Invoice(amount=Decimal("100.00"), paid_amount=Decimal("95.00"), status="gozlemede")
+    inv2.apartment = apt2
+    delta_info_overpay = _apply_payment_delta(inv2, 10.00)
+    _check("overpay_paid_capped_to_invoice_amount", inv2.paid_amount, 100.00)
+    _check("overpay_moved_to_credit", delta_info_overpay["moved_to_credit"], 5.00)
+    _check("overpay_credit_balance", apt2.credit_balance, 5.00)
+
+    # Scenario 3: negative correction first consumes apartment credit.
+    apt3 = Apartment(area=60.0, credit_balance=Decimal("4.00"))
+    inv3 = Invoice(amount=Decimal("100.00"), paid_amount=Decimal("90.00"), status="gozlemede")
+    inv3.apartment = apt3
+    delta_info_reversal = _apply_payment_delta(inv3, -6.00)
+    _check("reversal_removed_from_credit", delta_info_reversal["removed_from_credit"], 4.00)
+    _check("reversal_credit_after_consume", apt3.credit_balance, 0.00)
+    _check("reversal_paid_after_remainder", inv3.paid_amount, 88.00)
+
+    # Scenario 4: resident debt uses max(0, base_debt - credit).
+    base_debt = max(0.0, 100.0 - 100.0) + max(0.0, 50.0 - 30.0)
+    credit_balance = 25.0
+    resident_debt = max(0.0, round(base_debt - credit_balance, 2))
+    _check("resident_debt_clamped", resident_debt, 0.00)
+
+    # Scenario 5: invoice amount uses tariff scope and types.
+    apt4 = Apartment(id=101, area=50.0)
+    t1 = Tariff(id=201, type="per_m2", amount=Decimal("1.20"))
+    t2 = Tariff(id=202, type="fixed", amount=Decimal("10.00"))
+    t3 = Tariff(id=203, type="fixed", amount=Decimal("7.00"))
+    scope_map = {203: {999}}  # excluded for this apartment
+    amount_total = compute_invoice_amount(apt4, [t1, t2, t3], scope_map)
+    _check("invoice_amount_from_tariffs", amount_total, 70.00)
+
+    ok = all(c["ok"] for c in checks)
+    return {"ok": ok, "checks": checks}
 
 
 @app.route("/init")
