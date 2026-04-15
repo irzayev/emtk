@@ -57,7 +57,7 @@
                 {% if house_balance > 0 %}
                     <div class="h5 mb-0 text-success">+{{ house_balance|azn }}</div>
                 {% elif house_balance < 0 %}
-                    <div class="h5 mb-0 text-danger">{{ house_balance|azn }}</div>
+                    <div class="h5 mb-0 text-danger">-{{ (house_balance * -1)|azn }}</div>
                 {% else %}
                     <div class="h5 mb-0 text-muted">{{ house_balance|azn }}</div>
                 {% endif %}
