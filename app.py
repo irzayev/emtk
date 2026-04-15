@@ -2177,14 +2177,18 @@ def admin_settings():
 @login_required
 @role_required("superadmin")
 def admin_reset_financial():
-    user = current_user()
+    # Reload from DB to get fresh password_hash (avoids SQLAlchemy identity-map stale data)
+    user = db.session.get(User, session.get("user_id"))
+    if not user:
+        flash("İstifadəçi tapılmadı.", "danger")
+        return redirect(url_for("admin_settings"))
     password = request.form.get("confirm_password", "")
     if not check_password_hash(user.password_hash, password):
         flash("Şifrə yanlışdır. Sıfırlama ləğv edildi.", "danger")
         return redirect(url_for("admin_settings"))
 
     # Delete in dependency order to avoid FK violations
-    Payment.query.delete()
+    Payment.query.delete(synchronize_session=False)
     # Reset invoices: clear paid amounts and revert status
     for inv in Invoice.query.all():
         inv.paid_amount = Decimal("0.00")
@@ -2193,8 +2197,8 @@ def admin_reset_financial():
     for apt in Apartment.query.all():
         apt.credit_balance = Decimal("0.00")
     # Delete standalone financial history
-    BalanceTopUp.query.delete()
-    AuditLog.query.delete()
+    BalanceTopUp.query.delete(synchronize_session=False)
+    AuditLog.query.delete(synchronize_session=False)
     db.session.commit()
 
     # Write a fresh audit entry after the wipe
