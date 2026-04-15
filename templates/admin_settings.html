@@ -1,6 +1,58 @@
 {% extends "base.html" %}
 {% block content %}
 <h3 class="mb-3">Ayarlar</h3>
+
+{% if session.get('role') == 'superadmin' %}
+<!-- Danger zone -->
+<div class="card border-danger border-2 shadow-sm mb-4">
+    <div class="card-body">
+        <h5 class="text-danger mb-1">Təhlükəli zona</h5>
+        <p class="text-muted small mb-3">Bu bölmədəki əməliyyatlar geri qaytarıla bilməz. Diqqətli olun.</p>
+        <div class="d-flex align-items-start gap-3 flex-wrap">
+            <div>
+                <div class="fw-semibold">Maliyyə sıfırlaması</div>
+                <div class="small text-muted">Bütün ödənişlər, borclar, balanslar və tarixçə silinər. Hesablar və mənzillər qalır.</div>
+            </div>
+            <button class="btn btn-danger ms-auto flex-shrink-0" data-bs-toggle="modal" data-bs-target="#resetFinancialModal">
+                Sıfırla
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm modal -->
+<div class="modal fade" id="resetFinancialModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title text-danger">Maliyyə məlumatlarını sıfırla</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger py-2 small mb-3">
+                    <strong>Diqqət!</strong> Aşağıdakılar <strong>birdəfəlik</strong> silinəcək:
+                    <ul class="mb-0 mt-1">
+                        <li>Bütün ödənişlər (Payment)</li>
+                        <li>Hesab-fakturaların ödəniş məbləğləri sıfırlanacaq</li>
+                        <li>Mənzil kredit balansları sıfırlanacaq</li>
+                        <li>Balans artımları (BalanceTopUp)</li>
+                        <li>Audit tarixçəsi</li>
+                    </ul>
+                </div>
+                <form method="post" action="{{ url_for('admin_reset_financial') }}" id="resetFinancialForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label class="form-label fw-semibold">Təsdiq üçün şifrənizi daxil edin</label>
+                    <input class="form-control" type="password" name="confirm_password" autocomplete="current-password" required placeholder="Şifrə">
+                </form>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Ləğv et</button>
+                <button class="btn btn-danger" onclick="document.getElementById('resetFinancialForm').submit()">Bəli, sıfırla</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 <div class="card border-0 shadow-sm">
     <div class="card-body">
         <h5 class="mb-3">Sistem məlumatları</h5>

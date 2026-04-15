@@ -2173,6 +2173,38 @@ def admin_settings():
     return render_template("admin_settings.html", cfg=cfg)
 
 
+@app.route("/admin/reset-financial", methods=["POST"])
+@login_required
+@role_required("superadmin")
+def admin_reset_financial():
+    user = current_user()
+    password = request.form.get("confirm_password", "")
+    if not check_password_hash(user.password_hash, password):
+        flash("Şifrə yanlışdır. Sıfırlama ləğv edildi.", "danger")
+        return redirect(url_for("admin_settings"))
+
+    # Delete in dependency order to avoid FK violations
+    Payment.query.delete()
+    # Reset invoices: clear paid amounts and revert status
+    for inv in Invoice.query.all():
+        inv.paid_amount = Decimal("0.00")
+        inv.status = "gozlemede"
+    # Reset apartment credit balances
+    for apt in Apartment.query.all():
+        apt.credit_balance = Decimal("0.00")
+    # Delete standalone financial history
+    BalanceTopUp.query.delete()
+    AuditLog.query.delete()
+    db.session.commit()
+
+    # Write a fresh audit entry after the wipe
+    db.session.add(AuditLog(actor_user_id=user.id, action="Bütün maliyyə məlumatları sıfırlandı (superadmin)"))
+    db.session.commit()
+
+    flash("Bütün ödəniş, borc və tarixçə məlumatları sıfırlandı.", "success")
+    return redirect(url_for("admin_settings"))
+
+
 @app.route("/admin/health/money-schema")
 @login_required
 @role_required("superadmin", "komendant")
