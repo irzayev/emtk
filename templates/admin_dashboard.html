@@ -5,7 +5,6 @@
     <div class="d-flex gap-2">
         <form method="post" action="{{ url_for('generate_invoices') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-primary btn-sm" type="submit">Hesablari yarat</button>
         </form>
     </div>
 </div>
