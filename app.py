@@ -788,12 +788,9 @@ def dashboard():
         apartment, apartments = get_selected_apartment(user)
         invoices = Invoice.query.filter_by(apartment_id=apartment.id).order_by(Invoice.created_at.desc()).all() if apartment else []
 
-        # FIX #3: Use max(0, ...) per invoice before summing so that overpaid
-        # invoices (where paid_amount > amount) do not produce a negative
-        # contribution that incorrectly reduces the total debt figure.
-        base_debt = sum(max(0.0, float(i.amount) - float(i.paid_amount)) for i in invoices)
+        base_debt = sum(float(i.amount) - float(i.paid_amount) for i in invoices)
         credit_balance = float(apartment.credit_balance or 0) if apartment else 0.0
-        debt = max(0.0, round(base_debt - credit_balance, 2))
+        debt = round(base_debt - credit_balance, 2)
 
         # Building-wide metrics (read-only for residents).
         # Use the same db.case guard as the admin dashboard to avoid negative
@@ -801,7 +798,7 @@ def dashboard():
         debt_expr = db.case((Invoice.amount - Invoice.paid_amount > 0, Invoice.amount - Invoice.paid_amount), else_=0.0)
         house_total_debt = db.session.query(db.func.sum(debt_expr)).scalar() or 0
         house_credit_total = db.session.query(db.func.sum(Apartment.credit_balance)).scalar() or 0
-        house_total_debt = max(0.0, float(house_total_debt or 0) - float(house_credit_total or 0))
+        house_total_debt = float(house_total_debt or 0) - float(house_credit_total or 0)
         income_total = (
             db.session.query(db.func.sum(Payment.amount)).filter(Payment.status == "confirmed").scalar() or 0
         )
@@ -854,7 +851,7 @@ def dashboard():
     debt_expr = db.case((Invoice.amount - Invoice.paid_amount > 0, Invoice.amount - Invoice.paid_amount), else_=0.0)
     debt = db.session.query(db.func.sum(debt_expr)).scalar() or 0
     house_credit_total = db.session.query(db.func.sum(Apartment.credit_balance)).scalar() or 0
-    debt = max(0.0, float(debt or 0) - float(house_credit_total or 0))
+    debt = float(debt or 0) - float(house_credit_total or 0)
     pending_invoices = Invoice.query.filter(Invoice.status != "odenilib").count()
     recent_logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(10).all()
     period_payments = Payment.query.filter(
@@ -916,7 +913,7 @@ def dashboard():
     )
     debt_by_apartment = []
     for apt_id, apt_no, inv_debt_sum, credit_bal in debt_rows:
-        v = max(0.0, float(inv_debt_sum or 0) - float(credit_bal or 0))
+        v = float(inv_debt_sum or 0) - float(credit_bal or 0)
         debt_by_apartment.append((apt_no, round(v, 2)))
     debt_by_apartment.sort(key=lambda x: x[0])
 
@@ -1025,7 +1022,7 @@ def admin_apartments():
     for a in apartments:
         inv_bal = float(inv_balance_by_apartment_id.get(a.id, 0) or 0)
         credit = float(a.credit_balance or 0)
-        debt_by_apartment_id[a.id] = max(0.0, round(inv_bal - credit, 2))
+        debt_by_apartment_id[a.id] = round(inv_bal - credit, 2)
     return render_template(
         "admin_apartments.html",
         apartments=apartments,
@@ -1397,7 +1394,25 @@ def toggle_expense_paid(expense_id):
 @login_required
 @role_required("komendant", "superadmin")
 def admin_invoices():
-    invoices = Invoice.query.order_by(Invoice.created_at.desc()).all()
+    selected_period = (request.args.get("period", "") or "").strip()
+    period_rows = (
+        db.session.query(Invoice.period)
+        .filter(Invoice.period.isnot(None), Invoice.period != "")
+        .group_by(Invoice.period)
+        .order_by(Invoice.period.desc())
+        .all()
+    )
+    available_periods = [p for (p,) in period_rows]
+    if not selected_period and available_periods:
+        selected_period = available_periods[0]
+    if selected_period and selected_period not in available_periods:
+        selected_period = available_periods[0] if available_periods else ""
+
+    invoices_query = Invoice.query
+    if selected_period:
+        invoices_query = invoices_query.filter(Invoice.period == selected_period)
+    invoices = invoices_query.order_by(Invoice.created_at.desc()).all()
+
     dirty = False
     for inv in invoices:
         expected = "odenilib" if float(inv.paid_amount or 0) >= float(inv.amount or 0) else "gozlemede"
@@ -1406,7 +1421,24 @@ def admin_invoices():
             dirty = True
     if dirty:
         db.session.commit()
-    return render_template("admin_invoices.html", invoices=invoices)
+
+    prev_period = None
+    next_period = None
+    if selected_period and selected_period in available_periods:
+        idx = available_periods.index(selected_period)
+        if idx > 0:
+            next_period = available_periods[idx - 1]
+        if idx < len(available_periods) - 1:
+            prev_period = available_periods[idx + 1]
+
+    return render_template(
+        "admin_invoices.html",
+        invoices=invoices,
+        selected_period=selected_period,
+        available_periods=available_periods,
+        prev_period=prev_period,
+        next_period=next_period,
+    )
 
 
 @app.route("/admin/payments/confirm/<int:payment_id>", methods=["POST"])
@@ -1416,7 +1448,8 @@ def confirm_payment(payment_id):
     payment = Payment.query.get_or_404(payment_id)
     if payment.status != "pending":
         flash("Bu muraciet artiq emal olunub.", "warning")
-        return redirect(url_for("admin_invoices"))
+        period = (request.form.get("period", "") or "").strip()
+        return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
 
     invoice = payment.invoice
     apply_amount = float(payment.amount)
@@ -1433,7 +1466,8 @@ def confirm_payment(payment_id):
     except Exception:
         db.session.rollback()
         flash("Xəta baş verdi. Ödəniş təsdiqlənmədi.", "danger")
-        return redirect(url_for("admin_invoices"))
+        period = (request.form.get("period", "") or "").strip()
+        return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
 
     moved = float(result.get("moved_to_credit") or 0)
     removed = float(result.get("removed_from_credit") or 0)
@@ -1444,7 +1478,8 @@ def confirm_payment(payment_id):
     else:
         audit(f"Odenis tesdiqlendi #{payment.id} {apply_amount:.2f} AZN")
     flash("Odenis tesdiqlendi.", "success")
-    return redirect(url_for("admin_invoices"))
+    period = (request.form.get("period", "") or "").strip()
+    return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
 
 
 @app.route("/admin/payments/reject/<int:payment_id>", methods=["POST"])
@@ -1454,7 +1489,8 @@ def reject_payment(payment_id):
     payment = Payment.query.get_or_404(payment_id)
     if payment.status != "pending":
         flash("Bu muraciet artiq emal olunub.", "warning")
-        return redirect(url_for("admin_invoices"))
+        period = (request.form.get("period", "") or "").strip()
+        return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
 
     payment.status = "rejected"
     payment.reviewer_user_id = current_user().id
@@ -1462,7 +1498,8 @@ def reject_payment(payment_id):
     db.session.commit()
     audit(f"Odenis imtina edildi #{payment.id}")
     flash("Odenis muracieti imtina edildi.", "warning")
-    return redirect(url_for("admin_invoices"))
+    period = (request.form.get("period", "") or "").strip()
+    return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
 
 @app.route("/admin/payments/add/<int:invoice_id>", methods=["POST"])
 @login_required
@@ -1473,12 +1510,14 @@ def add_payment(invoice_id):
         amount = float(request.form["amount"])
     except (TypeError, ValueError):
         flash("Məbləğ düzgün deyil.", "danger")
-        return redirect(url_for("admin_invoices"))
+        period = (request.form.get("period", "") or "").strip()
+        return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
     comment = (request.form.get("comment", "") or "").strip() or None
 
     if amount == 0:
         flash("Məbləğ sıfır ola bilməz.", "danger")
-        return redirect(url_for("admin_invoices"))
+        period = (request.form.get("period", "") or "").strip()
+        return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
 
     apply_amount = amount
     now = datetime.utcnow()
@@ -1501,7 +1540,8 @@ def add_payment(invoice_id):
     except Exception:
         db.session.rollback()
         flash("Xəta baş verdi. Ödəniş daxil edilmədi.", "danger")
-        return redirect(url_for("admin_invoices"))
+        period = (request.form.get("period", "") or "").strip()
+        return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
 
     moved = float(result.get("moved_to_credit") or 0)
     removed = float(result.get("removed_from_credit") or 0)
@@ -1512,7 +1552,8 @@ def add_payment(invoice_id):
     else:
         audit(f"Odenis daxil edildi invoice#{invoice.id} {apply_amount:.2f} AZN")
     flash("Odenis daxil edildi.", "success")
-    return redirect(url_for("admin_invoices"))
+    period = (request.form.get("period", "") or "").strip()
+    return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
 
 
 @app.route("/admin/history")
@@ -2015,14 +2056,12 @@ def send_invoice_email(invoice_id):
 def print_invoice(invoice_id):
     invoice = Invoice.query.get_or_404(invoice_id)
     cfg = get_smtp_config()
-    debt = max(0.0, round(invoice.amount - invoice.paid_amount, 2))
     return render_template(
         "invoice_print.html",
         invoice=invoice,
         resident=invoice.apartment.owner,
         cfg=cfg,
         system_name=(cfg.system_name or "").strip() or "eMTK",
-        debt=debt,
         issue_date=datetime.utcnow(),
     )
 

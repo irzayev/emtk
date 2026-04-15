@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+{% set balance = (invoice.paid_amount - invoice.amount) %}
 <div class="d-print-none d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Hesab-faktura</h3>
     <div class="d-flex gap-2">
@@ -73,15 +74,9 @@
                         <th class="text-end">{{ invoice.paid_amount|azn }}</th>
                     </tr>
                     <tr>
-                        <th class="text-end">Borc / Kredit</th>
+                        <th class="text-end">Balans</th>
                         <th class="text-end">
-                            {% if (invoice.amount - invoice.paid_amount) > 0 %}
-                                <span class="text-danger fw-semibold">{{ (invoice.amount - invoice.paid_amount)|azn }}</span>
-                            {% elif (invoice.amount - invoice.paid_amount) < 0 %}
-                                <span class="text-success fw-semibold">+{{ (invoice.paid_amount - invoice.amount)|azn }}</span>
-                            {% else %}
-                                <span class="text-muted">{{ 0|azn }}</span>
-                            {% endif %}
+                            <span class="{% if balance < 0 %}text-danger{% elif balance > 0 %}text-success{% else %}text-muted{% endif %} fw-semibold">{{ balance|azn }}</span>
                         </th>
                     </tr>
                 </tfoot>

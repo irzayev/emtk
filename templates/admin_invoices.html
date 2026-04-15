@@ -2,14 +2,36 @@
 {% block content %}
 <div class="d-flex justify-content-between mb-3">
     <h3>Hesablar</h3>
-    <form method="post" action="{{ url_for('generate_invoices') }}" class="d-flex gap-2">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <select class="form-select form-select-sm" name="period_mode">
-            <option value="current" selected>Cari ay</option>
-            <option value="next">Növbəti ay (cari + növbəti)</option>
-        </select>
-        <button class="btn btn-primary btn-sm" type="submit">Yarat</button>
-    </form>
+    <div class="d-flex gap-2">
+        <form method="get" action="{{ url_for('admin_invoices') }}" class="d-flex gap-2">
+            <select class="form-select form-select-sm" name="period" onchange="this.form.submit()">
+                {% for p in available_periods %}
+                <option value="{{ p }}" {% if p == selected_period %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        <form method="post" action="{{ url_for('generate_invoices') }}" class="d-flex gap-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select class="form-select form-select-sm" name="period_mode">
+                <option value="current" selected>Cari ay</option>
+                <option value="next">Növbəti ay (cari + növbəti)</option>
+            </select>
+            <button class="btn btn-primary btn-sm" type="submit">Yarat</button>
+        </form>
+    </div>
+</div>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="text-muted small">
+        {% if selected_period %}Seçilmiş ay: {{ selected_period }}{% else %}Ay seçimi yoxdur{% endif %}
+    </div>
+    <div class="d-flex gap-2">
+        {% if prev_period %}
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_invoices', period=prev_period) }}">← Əvvəlki ay</a>
+        {% endif %}
+        {% if next_period %}
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_invoices', period=next_period) }}">Növbəti ay →</a>
+        {% endif %}
+    </div>
 </div>
 <div class="card border-0 shadow-sm">
     <div class="card-body">
@@ -18,8 +40,7 @@
                 <thead><tr><th>Mənzil</th><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Balans</th><th>Status</th><th>Ödəniş</th><th>Hesab-faktura</th><th>Email</th></tr></thead>
                 <tbody>
                 {% for i in invoices %}
-                    {% set credit = (i.apartment.credit_balance or 0) %}
-                    {% set balance = (i.amount - i.paid_amount - credit) %}
+                    {% set balance = (i.paid_amount - i.amount) %}
                     {% set computed_status = ('ödənilib' if i.paid_amount >= i.amount else 'gözləmədə') %}
                     <tr>
                         <td>{{ i.apartment.number }}</td>
@@ -29,10 +50,10 @@
                             <div>{{ i.paid_amount|azn }}</div>
                         </td>
                         <td>
-                            {% if balance > 0 %}
+                            {% if balance < 0 %}
                                 <span class="text-danger fw-semibold">{{ balance|azn }}</span>
-                            {% elif balance < 0 %}
-                                <span class="text-success fw-semibold">+{{ (-balance)|azn }}</span>
+                            {% elif balance > 0 %}
+                                <span class="text-success fw-semibold">{{ balance|azn }}</span>
                             {% else %}
                                 <span class="text-muted">{{ 0|azn }}</span>
                             {% endif %}
@@ -41,6 +62,7 @@
                         <td style="min-width: 240px;">
                             <form method="post" action="{{ url_for('add_payment', invoice_id=i.id) }}" class="row g-2 align-items-end">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="period" value="{{ selected_period }}">
                                 <div class="col-6 col-md-3">
                                     <input class="form-control form-control-sm" type="number" step="0.01" min="-9999" max="9999" name="amount" placeholder="Məbləğ" required>
                                 </div>
