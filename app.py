@@ -2151,6 +2151,15 @@ def polls():
             db.session.commit()
             audit(f"{'Acilib' if poll.is_open else 'Baglanib'} sorgu #{poll_id}")
             flash("Sorgunun statusu yenilendi.", "success")
+        elif user.role in ("komendant", "superadmin") and request.form["form_type"] == "delete_poll":
+            poll_id = int(request.form["poll_id"])
+            poll = Poll.query.get_or_404(poll_id)
+            poll_title = poll.title
+            Vote.query.filter_by(poll_id=poll.id).delete(synchronize_session=False)
+            db.session.delete(poll)
+            db.session.commit()
+            audit(f"Sorgu silindi #{poll_id}: {poll_title}")
+            flash("Sorgu silindi.", "success")
         elif user.role == "resident":
             poll_id = int(request.form["poll_id"])
             choice = request.form["choice"]

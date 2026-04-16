@@ -69,14 +69,22 @@
         {% endif %}
 
         {% if user.role in ['komendant', 'superadmin'] %}
-        <form method="post" class="mt-2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="form_type" value="toggle_poll_status">
-            <input type="hidden" name="poll_id" value="{{ row.poll.id }}">
-            <button class="btn btn-sm {{ 'btn-outline-danger' if row.poll.is_open else 'btn-outline-success' }}">
-                {{ 'Sesvermeyi bagla' if row.poll.is_open else 'Sesvermeyi ac' }}
-            </button>
-        </form>
+        <div class="d-flex gap-2 mt-2">
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="form_type" value="toggle_poll_status">
+                <input type="hidden" name="poll_id" value="{{ row.poll.id }}">
+                <button class="btn btn-sm {{ 'btn-outline-danger' if row.poll.is_open else 'btn-outline-success' }}">
+                    {{ 'Sesvermeyi bagla' if row.poll.is_open else 'Sesvermeyi ac' }}
+                </button>
+            </form>
+            <form method="post" onsubmit="return confirm('Sorğu silinsin?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="form_type" value="delete_poll">
+                <input type="hidden" name="poll_id" value="{{ row.poll.id }}">
+                <button class="btn btn-sm btn-outline-danger">Sil</button>
+            </form>
+        </div>
         {% endif %}
     </div>
 </div>
