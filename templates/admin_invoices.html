@@ -62,7 +62,19 @@
                                 <span class="text-muted">{{ 0|azn }}</span>
                             {% endif %}
                         </td>
-                        <td><span class="badge bg-{{ 'success' if computed_status == 'ödənilib' else 'warning' }}">{{ computed_status }}</span></td>
+                        <td>
+                            <span class="badge bg-{{ 'success' if computed_status == 'ödənilib' else 'warning' }}">{{ computed_status }}</span>
+                            {% set remaining_debt = (i.amount - i.paid_amount) %}
+                            {% if remaining_debt > 0 %}
+                            <form method="post" action="{{ url_for('add_payment', invoice_id=i.id) }}" class="mt-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="period" value="{{ selected_period }}">
+                                <input type="hidden" name="amount" value="{{ remaining_debt|round(2) }}">
+                                <input type="hidden" name="comment" value="Tam Ödəniş">
+                                <button class="btn btn-sm btn-outline-success w-100">Tam Ödəniş</button>
+                            </form>
+                            {% endif %}
+                        </td>
                         <td style="min-width: 240px;">
                             <form method="post" action="{{ url_for('add_payment', invoice_id=i.id) }}" class="row g-2 align-items-end">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
