@@ -1631,18 +1631,54 @@ def add_payment(invoice_id):
 @role_required("komendant", "superadmin")
 def admin_history():
     # Unified history: payments (confirmed), balance top-ups, expenses.
-    limit = 300
+    # Paginated by month using ?month=YYYY-MM.
+    month_rows = (
+        db.session.query(db.func.strftime("%Y-%m", Payment.created_at).label("month"))
+        .filter(Payment.status == "confirmed", Payment.created_at.isnot(None))
+        .union(
+            db.session.query(db.func.strftime("%Y-%m", BalanceTopUp.created_at).label("month")).filter(
+                BalanceTopUp.created_at.isnot(None)
+            ),
+            db.session.query(db.func.strftime("%Y-%m", Expense.created_at).label("month")).filter(
+                Expense.created_at.isnot(None)
+            ),
+        )
+        .all()
+    )
+    available_months = sorted([m for (m,) in month_rows if m], reverse=True)
 
-    confirmed_payments = (
+    selected_month = (request.args.get("month") or "").strip()
+    if not selected_month and available_months:
+        selected_month = available_months[0]
+    if selected_month and selected_month not in available_months:
+        selected_month = available_months[0] if available_months else ""
+
+    month_start = None
+    month_end = None
+    if selected_month:
+        year, month = [int(x) for x in selected_month.split("-")]
+        month_start = datetime(year, month, 1)
+        if month == 12:
+            month_end = datetime(year + 1, 1, 1)
+        else:
+            month_end = datetime(year, month + 1, 1)
+
+    limit = 500
+    payments_query = (
         Payment.query.join(Invoice, Payment.invoice_id == Invoice.id)
         .join(Apartment, Invoice.apartment_id == Apartment.id)
         .filter(Payment.status == "confirmed")
-        .order_by(Payment.created_at.desc())
-        .limit(limit)
-        .all()
     )
-    topups = BalanceTopUp.query.order_by(BalanceTopUp.created_at.desc()).limit(limit).all()
-    expenses = Expense.query.order_by(Expense.created_at.desc()).limit(limit).all()
+    topups_query = BalanceTopUp.query
+    expenses_query = Expense.query
+    if month_start and month_end:
+        payments_query = payments_query.filter(Payment.created_at >= month_start, Payment.created_at < month_end)
+        topups_query = topups_query.filter(BalanceTopUp.created_at >= month_start, BalanceTopUp.created_at < month_end)
+        expenses_query = expenses_query.filter(Expense.created_at >= month_start, Expense.created_at < month_end)
+
+    confirmed_payments = payments_query.order_by(Payment.created_at.desc()).limit(limit).all()
+    topups = topups_query.order_by(BalanceTopUp.created_at.desc()).limit(limit).all()
+    expenses = expenses_query.order_by(Expense.created_at.desc()).limit(limit).all()
 
     events = []
     for p in confirmed_payments:
@@ -1683,7 +1719,23 @@ def admin_history():
 
     events.sort(key=lambda x: x["dt"] or datetime.min, reverse=True)
     events = events[:limit]
-    return render_template("admin_history.html", events=events)
+    prev_month = None
+    next_month = None
+    if selected_month and selected_month in available_months:
+        idx = available_months.index(selected_month)
+        if idx > 0:
+            next_month = available_months[idx - 1]
+        if idx < len(available_months) - 1:
+            prev_month = available_months[idx + 1]
+
+    return render_template(
+        "admin_history.html",
+        events=events,
+        selected_month=selected_month,
+        available_months=available_months,
+        prev_month=prev_month,
+        next_month=next_month,
+    )
 
 
 def _iter_months_inclusive(from_period: str, to_period: str):
