@@ -71,6 +71,7 @@ class Apartment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     number = db.Column(db.String(20), unique=True, nullable=False)
     floor = db.Column(db.Integer, nullable=False)
+    rooms = db.Column(db.Integer, nullable=True)
     area = db.Column(db.Float, nullable=False)
     owner_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     owner = db.relationship("User", backref="apartments")
@@ -83,6 +84,14 @@ class Tariff(db.Model):
     type = db.Column(db.String(20), nullable=False)  # per_m2 | fixed
     amount = db.Column(db.Numeric(12, 2), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+
+
+class ApartmentPreset(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    rooms = db.Column(db.Integer, nullable=False)
+    area = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class TariffApartment(db.Model):
@@ -332,6 +341,15 @@ def ensure_apartment_schema():
         columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(apartment)")}
         if "credit_balance" not in columns:
             conn.exec_driver_sql("ALTER TABLE apartment ADD COLUMN credit_balance NUMERIC NOT NULL DEFAULT 0")
+        if "rooms" not in columns:
+            conn.exec_driver_sql("ALTER TABLE apartment ADD COLUMN rooms INTEGER")
+
+
+def ensure_apartment_preset_schema():
+    with db.engine.connect() as conn:
+        tables = {row[0] for row in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'")}
+        if "apartment_preset" not in tables:
+            db.create_all()
 
 
 def ensure_money_numeric_schema():
@@ -531,6 +549,7 @@ def ensure_user_role_migration():
 _did_role_migration = False
 _did_money_migration = False
 _did_default_superadmin_seed = False
+_did_apartment_schema_migration = False
 
 
 def ensure_default_superadmin_seed():
@@ -554,6 +573,7 @@ def _run_role_migration_once():
     global _did_role_migration
     global _did_money_migration
     global _did_default_superadmin_seed
+    global _did_apartment_schema_migration
     if not _did_money_migration:
         try:
             ensure_money_numeric_schema()
@@ -564,6 +584,12 @@ def _run_role_migration_once():
             ensure_user_role_migration()
         finally:
             _did_role_migration = True
+    if not _did_apartment_schema_migration:
+        try:
+            ensure_apartment_schema()
+            ensure_apartment_preset_schema()
+        finally:
+            _did_apartment_schema_migration = True
     if _did_default_superadmin_seed:
         return
     try:
@@ -1071,9 +1097,11 @@ def admin_apartments():
     if request.method == "POST":
         number = request.form["number"].strip()
         floor = int(request.form["floor"])
+        rooms_raw = (request.form.get("rooms", "") or "").strip()
+        rooms = int(rooms_raw) if rooms_raw else None
         area = float(request.form["area"])
         owner_user_id = int(request.form["owner_user_id"])
-        db.session.add(Apartment(number=number, floor=floor, area=area, owner_user_id=owner_user_id))
+        db.session.add(Apartment(number=number, floor=floor, rooms=rooms, area=area, owner_user_id=owner_user_id))
         db.session.commit()
         audit(f"Menzil yaradildi {number}")
         flash("Menzil elave edildi.", "success")
@@ -1081,6 +1109,7 @@ def admin_apartments():
 
     apartments = Apartment.query.order_by(Apartment.number).all()
     residents = User.query.filter_by(role="resident").all()
+    apartment_presets = ApartmentPreset.query.order_by(ApartmentPreset.rooms.asc(), ApartmentPreset.area.asc()).all()
     debt_expr = db.case((Invoice.amount - Invoice.paid_amount > 0, Invoice.amount - Invoice.paid_amount), else_=0.0)
     debt_rows = (
         db.session.query(Invoice.apartment_id, db.func.sum(debt_expr))
@@ -1097,6 +1126,7 @@ def admin_apartments():
         "admin_apartments.html",
         apartments=apartments,
         residents=residents,
+        apartment_presets=apartment_presets,
         debt_by_apartment_id=debt_by_apartment_id,
     )
 
@@ -1127,6 +1157,8 @@ def update_apartment(apartment_id):
     apartment = Apartment.query.get_or_404(apartment_id)
     number = request.form["number"].strip()
     floor = int(request.form["floor"])
+    rooms_raw = (request.form.get("rooms", "") or "").strip()
+    rooms = int(rooms_raw) if rooms_raw else None
     area = float(request.form["area"])
     owner_user_id = int(request.form["owner_user_id"])
 
@@ -1137,6 +1169,7 @@ def update_apartment(apartment_id):
 
     apartment.number = number
     apartment.floor = floor
+    apartment.rooms = rooms
     apartment.area = area
     apartment.owner_user_id = owner_user_id
     db.session.commit()
@@ -1370,6 +1403,34 @@ def admin_expenses():
             t.is_active = not t.is_active
             db.session.commit()
             audit(f"Xərc şablonu statusu dəyişdi #{template_id}")
+            return redirect(url_for("admin_expenses"))
+        if form_type == "update_template":
+            template_id = int(request.form["template_id"])
+            t = ExpenseTemplate.query.get_or_404(template_id)
+            name = (request.form.get("name", "") or "").strip()
+            default_amount = float(request.form.get("default_amount", "0") or 0)
+            is_recurring = request.form.get("is_recurring") == "on"
+            if not name:
+                flash("Ad bos ola bilmez.", "danger")
+                return redirect(url_for("admin_expenses"))
+            if default_amount < 0:
+                flash("Məbləğ mənfi ola bilməz.", "danger")
+                return redirect(url_for("admin_expenses"))
+            t.name = name
+            t.default_amount = round(default_amount, 2)
+            t.is_recurring = is_recurring
+            db.session.commit()
+            audit(f"Xərc şablonu yeniləndi #{template_id}: {name}")
+            flash("Xərc şablonu yeniləndi.", "success")
+            return redirect(url_for("admin_expenses"))
+        if form_type == "delete_template":
+            template_id = int(request.form["template_id"])
+            t = ExpenseTemplate.query.get_or_404(template_id)
+            Expense.query.filter_by(template_id=t.id).update({"template_id": None}, synchronize_session=False)
+            db.session.delete(t)
+            db.session.commit()
+            audit(f"Xərc şablonu silindi #{template_id}")
+            flash("Xərc şablonu silindi.", "success")
             return redirect(url_for("admin_expenses"))
         if form_type == "add_expense":
             period = (request.form.get("period", "") or "").strip()
@@ -1853,12 +1914,6 @@ def admin_content():
             flash("Is elave edildi.", "success")
             sysname = (get_smtp_config().system_name or "").strip() or "eMTK"
             notify_residents(f"{sysname}: Yeni isler", f"Yeni is elave edildi: {request.form['title'].strip()}")
-        else:
-            db.session.add(Announcement(title=request.form["title"].strip(), text=request.form["text"].strip()))
-            audit("Elan elave edildi")
-            flash("Elan elave edildi.", "success")
-            sysname = (get_smtp_config().system_name or "").strip() or "eMTK"
-            notify_residents(f"{sysname}: Yeni elan", f"Yeni elan: {request.form['title'].strip()}")
         db.session.commit()
         return redirect(url_for("admin_content", type=content_type))
 
@@ -2220,8 +2275,48 @@ def admin_settings():
                 flash("Test email ugurla gonderildi.", "success")
             else:
                 flash("Test email gonderilmedi. SMTP ayarlarini yoxlayin.", "danger")
+        elif form_type == "add_apartment_preset":
+            name = (request.form.get("name", "") or "").strip()
+            rooms_raw = (request.form.get("rooms", "") or "").strip()
+            area_raw = (request.form.get("area", "") or "").strip()
+            if not name or not rooms_raw or not area_raw:
+                flash("Preset üçün ad, otaq və sahə vacibdir.", "danger")
+                return redirect(url_for("admin_settings"))
+            rooms = int(rooms_raw)
+            area = float(area_raw)
+            if rooms <= 0 or area <= 0:
+                flash("Otaq və sahə sıfırdan böyük olmalıdır.", "danger")
+                return redirect(url_for("admin_settings"))
+            db.session.add(ApartmentPreset(name=name, rooms=rooms, area=round(area, 2)))
+            db.session.commit()
+            audit(f"Mənzil preset əlavə edildi: {name} ({rooms} otaq, {area:.2f} m2)")
+            flash("Mənzil preset əlavə edildi.", "success")
+        elif form_type == "update_apartment_preset":
+            preset_id = int(request.form["preset_id"])
+            preset = ApartmentPreset.query.get_or_404(preset_id)
+            name = (request.form.get("name", "") or "").strip()
+            rooms = int(request.form.get("rooms", "0") or 0)
+            area = float(request.form.get("area", "0") or 0)
+            if not name or rooms <= 0 or area <= 0:
+                flash("Preset məlumatları düzgün deyil.", "danger")
+                return redirect(url_for("admin_settings"))
+            preset.name = name
+            preset.rooms = rooms
+            preset.area = round(area, 2)
+            db.session.commit()
+            audit(f"Mənzil preset yeniləndi #{preset_id}")
+            flash("Mənzil preset yeniləndi.", "success")
+        elif form_type == "delete_apartment_preset":
+            preset_id = int(request.form["preset_id"])
+            preset = ApartmentPreset.query.get_or_404(preset_id)
+            preset_name = preset.name
+            db.session.delete(preset)
+            db.session.commit()
+            audit(f"Mənzil preset silindi #{preset_id}: {preset_name}")
+            flash("Mənzil preset silindi.", "success")
         return redirect(url_for("admin_settings"))
-    return render_template("admin_settings.html", cfg=cfg)
+    apartment_presets = ApartmentPreset.query.order_by(ApartmentPreset.rooms.asc(), ApartmentPreset.area.asc()).all()
+    return render_template("admin_settings.html", cfg=cfg, apartment_presets=apartment_presets)
 
 
 @app.route("/admin/reset-financial", methods=["POST"])
@@ -2409,6 +2504,7 @@ if __name__ == "__main__":
         ensure_poll_schema()
         ensure_payment_schema()
         ensure_apartment_schema()
+        ensure_apartment_preset_schema()
         ensure_system_schema()
         ensure_expense_schema()
         ensure_balance_schema()

@@ -8,7 +8,16 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="col-md-3"><input class="form-control" name="number" placeholder="Nömrə" required></div>
             <div class="col-md-2"><input class="form-control" type="number" name="floor" placeholder="Mərtəbə" required></div>
-            <div class="col-md-2"><input class="form-control" type="number" step="0.01" name="area" placeholder="Sahə" required></div>
+            <div class="col-md-2">
+                <select class="form-select js-apartment-preset">
+                    <option value="">Preset seçin</option>
+                    {% for p in apartment_presets %}
+                    <option value="{{ p.id }}" data-rooms="{{ p.rooms }}" data-area="{{ p.area }}">{{ p.name }} ({{ p.rooms }} otaq, {{ p.area }} m2)</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-1"><input class="form-control js-apartment-rooms" type="number" min="1" name="rooms" placeholder="Otaq"></div>
+            <div class="col-md-2"><input class="form-control js-apartment-area" type="number" step="0.01" name="area" placeholder="Sahə" required></div>
             <div class="col-md-3">
                 <select class="form-select" name="owner_user_id" required>
                     {% for r in residents %}
@@ -25,12 +34,13 @@
     <div class="card-body">
         <div class="table-responsive">
             <table class="table">
-                <thead><tr><th>№</th><th>Mərtəbə</th><th>Sahə</th><th>Sahib</th><th>Balans</th><th></th></tr></thead>
+                <thead><tr><th>№</th><th>Mərtəbə</th><th>Otaq</th><th>Sahə</th><th>Sahib</th><th>Balans</th><th></th></tr></thead>
                 <tbody>
                 {% for a in apartments %}
                     <tr>
                         <td>{{ a.number }}</td>
                         <td>{{ a.floor }}</td>
+                        <td>{{ a.rooms or '-' }}</td>
                         <td>{{ a.area }} м2</td>
                         <td>{{ a.owner.full_name }}</td>
                         {% set debt = (debt_by_apartment_id.get(a.id, 0) or 0) %}
@@ -52,11 +62,12 @@
                         </td>
                     </tr>
                     <tr class="collapse" id="edit-apartment-{{ a.id }}">
-                        <td colspan="6" class="bg-light">
+                        <td colspan="7" class="bg-light">
                             <form method="post" action="{{ url_for('update_apartment', apartment_id=a.id) }}" class="row g-2">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <div class="col-md-3"><input class="form-control" name="number" value="{{ a.number }}" required></div>
                                 <div class="col-md-2"><input class="form-control" type="number" name="floor" value="{{ a.floor }}" required></div>
+                                <div class="col-md-2"><input class="form-control" type="number" min="1" name="rooms" value="{{ a.rooms or '' }}" placeholder="Otaq"></div>
                                 <div class="col-md-2"><input class="form-control" type="number" step="0.01" name="area" value="{{ a.area }}" required></div>
                                 <div class="col-md-3">
                                     <select class="form-select" name="owner_user_id" required>
@@ -72,11 +83,25 @@
                         </td>
                     </tr>
                 {% else %}
-                    <tr><td colspan="6" class="text-muted">Melumat yoxdur.</td></tr>
+                    <tr><td colspan="7" class="text-muted">Melumat yoxdur.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
 </div>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const preset = document.querySelector(".js-apartment-preset");
+        if (!preset) return;
+        const roomsInput = document.querySelector(".js-apartment-rooms");
+        const areaInput = document.querySelector(".js-apartment-area");
+        preset.addEventListener("change", function () {
+            const opt = preset.options[preset.selectedIndex];
+            if (!opt) return;
+            if (roomsInput) roomsInput.value = opt.dataset.rooms || "";
+            if (areaInput) areaInput.value = opt.dataset.area || "";
+        });
+    });
+</script>
 {% endblock %}

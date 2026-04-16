@@ -5,7 +5,7 @@
     <a class="btn btn-outline-primary btn-sm" href="{{ url_for('polls') }}">Sorğular və səsvermələr</a>
 </div>
 <div class="row g-3">
-    <div class="col-lg-6">
+    <div class="col-12">
         <div class="card border-0 shadow-sm">
             <div class="card-body">
                 <h5>İş əlavə et</h5>
@@ -19,20 +19,6 @@
                     <label class="small text-muted">Sonrakı foto</label>
                     <input class="form-control" type="file" name="after_photo_file" accept=".jpg,.jpeg,.png,.webp,.gif">
                     <button class="btn btn-primary">Yadda saxla</button>
-                </form>
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body">
-                <h5>Elan əlavə et</h5>
-                <form method="post" class="vstack gap-2">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="form_type" value="announcement">
-                    <input class="form-control" name="title" placeholder="Basliq" required>
-                    <textarea class="form-control" name="text" placeholder="Metn" required></textarea>
-                    <button class="btn btn-primary">Paylaş</button>
                 </form>
             </div>
         </div>
