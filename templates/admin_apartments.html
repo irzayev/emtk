@@ -33,16 +33,87 @@
 <div class="card border-0 shadow-sm">
     <div class="card-body">
         <div class="table-responsive">
-            <table class="table">
-                <thead><tr><th>№</th><th>Mərtəbə</th><th>Otaq</th><th>Sahə</th><th>Sahib</th><th>Balans</th><th></th></tr></thead>
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>№</th>
+                        <th>Mərtəbə</th>
+                        <th>Otaq</th>
+                        <th>Sahə</th>
+                        <th>Sahib</th>
+                        <th>Balans</th>
+                        <th class="text-end">Əməliyyatlar</th>
+                    </tr>
+                </thead>
                 <tbody>
                 {% for a in apartments %}
-                    <tr>
-                        <td>{{ a.number }}</td>
-                        <td>{{ a.floor }}</td>
-                        <td>{{ a.rooms or '-' }}</td>
-                        <td>{{ a.area }} м2</td>
-                        <td>{{ a.owner.full_name }}</td>
+                    <tr data-apartment-row="{{ a.id }}">
+                        <td>
+                            <span class="js-apartment-view">{{ a.number }}</span>
+                            <input
+                                type="text"
+                                name="number"
+                                value="{{ a.number }}"
+                                class="form-control form-control-sm js-apartment-edit d-none"
+                                form="edit-apartment-{{ a.id }}-form"
+                                disabled
+                            >
+                        </td>
+                        <td>
+                            <span class="js-apartment-view">{{ a.floor }}</span>
+                            <input
+                                type="number"
+                                name="floor"
+                                value="{{ a.floor }}"
+                                class="form-control form-control-sm js-apartment-edit d-none"
+                                form="edit-apartment-{{ a.id }}-form"
+                                disabled
+                            >
+                        </td>
+                        <td>
+                            <span class="js-apartment-view">{{ a.rooms or '-' }}</span>
+                            <input
+                                type="number"
+                                name="rooms"
+                                value="{{ a.rooms or '' }}"
+                                class="form-control form-control-sm js-apartment-edit d-none"
+                                min="1"
+                                form="edit-apartment-{{ a.id }}-form"
+                                disabled
+                            >
+                        </td>
+                        <td>
+                            <span class="js-apartment-view">{{ a.area }} м2</span>
+                            <div class="js-apartment-edit d-none">
+                                <div class="input-group input-group-sm">
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        name="area"
+                                        value="{{ a.area }}"
+                                        class="form-control"
+                                        form="edit-apartment-{{ a.id }}-form"
+                                        disabled
+                                    >
+                                    <span class="input-group-text">м2</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="js-apartment-view">{{ a.owner.full_name }}</span>
+                            <select
+                                class="form-select form-select-sm js-apartment-edit d-none"
+                                name="owner_user_id"
+                                form="edit-apartment-{{ a.id }}-form"
+                                disabled
+                            >
+                                {% for r in residents %}
+                                <option value="{{ r.id }}" {% if r.id == a.owner_user_id %}selected{% endif %}>
+                                    {{ r.full_name }} ({{ r.email }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </td>
                         {% set debt = (debt_by_apartment_id.get(a.id, 0) or 0) %}
                         <td>
                             {% if debt > 0 %}
@@ -54,31 +125,47 @@
                             {% endif %}
                         </td>
                         <td class="text-end">
-                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-apartment-{{ a.id }}">Redaktə et</button>
-                            <form method="post" action="{{ url_for('delete_apartment', apartment_id=a.id) }}" class="d-inline" onsubmit="return confirm('Bu mənzili silmək istədiyinizə əminsiniz?');">
+                            <form
+                                id="edit-apartment-{{ a.id }}-form"
+                                method="post"
+                                action="{{ url_for('update_apartment', apartment_id=a.id) }}"
+                                class="d-inline"
+                            >
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            </form>
+
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline-primary js-apartment-edit-toggle"
+                                data-apartment-id="{{ a.id }}"
+                            >
+                                Redaktə et
+                            </button>
+
+                            <button
+                                type="submit"
+                                class="btn btn-sm btn-primary js-apartment-save d-none"
+                                form="edit-apartment-{{ a.id }}-form"
+                            >
+                                Yadda saxla
+                            </button>
+
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline-secondary js-apartment-cancel d-none"
+                                data-apartment-id="{{ a.id }}"
+                            >
+                                Ləğv et
+                            </button>
+
+                            <form
+                                method="post"
+                                action="{{ url_for('delete_apartment', apartment_id=a.id) }}"
+                                class="d-inline ms-1"
+                                onsubmit="return confirm('Bu mənzili silmək istədiyinizə əminsiniz?');"
+                            >
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button class="btn btn-sm btn-outline-danger">Sil</button>
-                            </form>
-                        </td>
-                    </tr>
-                    <tr class="collapse" id="edit-apartment-{{ a.id }}">
-                        <td colspan="7" class="bg-light">
-                            <form method="post" action="{{ url_for('update_apartment', apartment_id=a.id) }}" class="row g-2">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <div class="col-md-3"><input class="form-control" name="number" value="{{ a.number }}" required></div>
-                                <div class="col-md-2"><input class="form-control" type="number" name="floor" value="{{ a.floor }}" required></div>
-                                <div class="col-md-2"><input class="form-control" type="number" min="1" name="rooms" value="{{ a.rooms or '' }}" placeholder="Otaq"></div>
-                                <div class="col-md-2"><input class="form-control" type="number" step="0.01" name="area" value="{{ a.area }}" required></div>
-                                <div class="col-md-3">
-                                    <select class="form-select" name="owner_user_id" required>
-                                        {% for r in residents %}
-                                        <option value="{{ r.id }}" {% if r.id == a.owner_user_id %}selected{% endif %}>{{ r.full_name }} ({{ r.email }})</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="col-md-2">
-                                    <button class="btn btn-primary w-100">Yadda saxla</button>
-                                </div>
                             </form>
                         </td>
                     </tr>
@@ -93,14 +180,75 @@
 <script>
     document.addEventListener("DOMContentLoaded", function () {
         const preset = document.querySelector(".js-apartment-preset");
-        if (!preset) return;
-        const roomsInput = document.querySelector(".js-apartment-rooms");
-        const areaInput = document.querySelector(".js-apartment-area");
-        preset.addEventListener("change", function () {
-            const opt = preset.options[preset.selectedIndex];
-            if (!opt) return;
-            if (roomsInput) roomsInput.value = opt.dataset.rooms || "";
-            if (areaInput) areaInput.value = opt.dataset.area || "";
+        if (preset) {
+            const roomsInput = document.querySelector(".js-apartment-rooms");
+            const areaInput = document.querySelector(".js-apartment-area");
+            preset.addEventListener("change", function () {
+                const opt = preset.options[preset.selectedIndex];
+                if (!opt) return;
+                if (roomsInput) roomsInput.value = opt.dataset.rooms || "";
+                if (areaInput) areaInput.value = opt.dataset.area || "";
+            });
+        }
+
+        // Inline edit for apartment rows
+        let currentEditingId = null;
+
+        function setRowEditing(apartmentId, editing) {
+            const row = document.querySelector('[data-apartment-row="' + apartmentId + '"]');
+            if (!row) return;
+
+            const viewEls = row.querySelectorAll(".js-apartment-view");
+            const editEls = row.querySelectorAll(".js-apartment-edit");
+            const saveBtn = row.querySelector(".js-apartment-save");
+            const cancelBtn = row.querySelector(".js-apartment-cancel");
+            const toggleBtn = row.querySelector(".js-apartment-edit-toggle");
+
+            viewEls.forEach(el => el.classList.toggle("d-none", editing));
+            editEls.forEach(el => {
+                el.classList.toggle("d-none", !editing);
+                if (el.tagName === "INPUT" || el.tagName === "SELECT") {
+                    el.disabled = !editing;
+                }
+            });
+
+            if (saveBtn) saveBtn.classList.toggle("d-none", !editing);
+            if (cancelBtn) cancelBtn.classList.toggle("d-none", !editing);
+            if (toggleBtn) toggleBtn.classList.toggle("d-none", editing);
+        }
+
+        function cancelCurrentEditing() {
+            if (currentEditingId !== null) {
+                setRowEditing(currentEditingId, false);
+                currentEditingId = null;
+            }
+        }
+
+        document.querySelectorAll(".js-apartment-edit-toggle").forEach(btn => {
+            btn.addEventListener("click", function () {
+                const id = this.dataset.apartmentId;
+                if (!id) return;
+
+                // Close previous editing row
+                if (currentEditingId && currentEditingId !== id) {
+                    cancelCurrentEditing();
+                }
+
+                currentEditingId = id;
+                setRowEditing(id, true);
+            });
+        });
+
+        document.querySelectorAll(".js-apartment-cancel").forEach(btn => {
+            btn.addEventListener("click", function () {
+                const id = this.dataset.apartmentId;
+                if (!id) return;
+                if (currentEditingId === id) {
+                    cancelCurrentEditing();
+                } else {
+                    setRowEditing(id, false);
+                }
+            });
         });
     });
 </script>
