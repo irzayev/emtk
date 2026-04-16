@@ -99,6 +99,14 @@
             </div>
         </form>
         <hr>
+        <h6 class="mb-2">Test e-poçtu göndər</h6>
+        <form method="post" class="row g-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="form_type" value="test_email">
+            <div class="col-md-8"><input class="form-control" type="email" name="test_email" placeholder="test@example.com" required></div>
+            <div class="col-md-4"><button class="btn btn-outline-primary w-100">Test gonder</button></div>
+        </form>
+        <hr>
         <h5 class="mb-3">Mənzil presetləri</h5>
         <form method="post" class="row g-2 mb-3">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -157,14 +165,6 @@
                 </tbody>
             </table>
         </div>
-        <hr>
-        <h6 class="mb-2">Test e-poçtu göndər</h6>
-        <form method="post" class="row g-2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="form_type" value="test_email">
-            <div class="col-md-8"><input class="form-control" type="email" name="test_email" placeholder="test@example.com" required></div>
-            <div class="col-md-4"><button class="btn btn-outline-primary w-100">Test gonder</button></div>
-        </form>
     </div>
 </div>
 {% endblock %}
