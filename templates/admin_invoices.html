@@ -41,7 +41,7 @@
     <div class="card-body">
         <div class="table-responsive">
             <table class="table">
-                <thead><tr><th>Mənzil</th><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Balans</th><th>Status</th><th>Ödəniş</th><th>Hesab-faktura</th><th>Email</th></tr></thead>
+                <thead><tr><th>Mənzil</th><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Balans</th><th>Status</th><th>Tam Ödəniş</th><th>Ödəniş</th><th>Hesab-faktura</th><th>Email</th></tr></thead>
                 <tbody>
                 {% for i in invoices %}
                     {% set balance = (i.paid_amount - i.amount) %}
@@ -62,17 +62,19 @@
                                 <span class="text-muted">{{ 0|azn }}</span>
                             {% endif %}
                         </td>
+                        <td><span class="badge bg-{{ 'success' if computed_status == 'ödənilib' else 'warning' }}">{{ computed_status }}</span></td>
                         <td>
-                            <span class="badge bg-{{ 'success' if computed_status == 'ödənilib' else 'warning' }}">{{ computed_status }}</span>
                             {% set remaining_debt = (i.amount - i.paid_amount) %}
                             {% if remaining_debt > 0 %}
-                            <form method="post" action="{{ url_for('add_payment', invoice_id=i.id) }}" class="mt-2">
+                            <form method="post" action="{{ url_for('add_payment', invoice_id=i.id) }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="period" value="{{ selected_period }}">
                                 <input type="hidden" name="amount" value="{{ remaining_debt|round(2) }}">
                                 <input type="hidden" name="comment" value="Tam Ödəniş">
                                 <button class="btn btn-sm btn-outline-success w-100">Tam Ödəniş</button>
                             </form>
+                            {% else %}
+                            <span class="text-muted small">-</span>
                             {% endif %}
                         </td>
                         <td style="min-width: 240px;">
@@ -101,7 +103,7 @@
                         </td>
                     </tr>
                 {% else %}
-                    <tr><td colspan="9" class="text-muted">Hesab tapılmadı.</td></tr>
+                    <tr><td colspan="10" class="text-muted">Hesab tapılmadı.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
