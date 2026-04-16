@@ -9,7 +9,7 @@
             <div class="col-md-3"><input class="form-control" name="number" placeholder="Nömrə" required></div>
             <div class="col-md-2"><input class="form-control" type="number" name="floor" placeholder="Mərtəbə" required></div>
             <div class="col-md-2">
-                <select class="form-select js-apartment-preset">
+                <select class="form-select js-apartment-preset" name="preset_id">
                     <option value="">Preset seçin</option>
                     {% for p in apartment_presets %}
                     <option value="{{ p.id }}" data-rooms="{{ p.rooms }}" data-area="{{ p.area }}">{{ p.name }} ({{ p.rooms }} otaq, {{ p.area }} m2)</option>

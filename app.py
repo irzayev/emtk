@@ -1097,9 +1097,18 @@ def admin_apartments():
     if request.method == "POST":
         number = request.form["number"].strip()
         floor = int(request.form["floor"])
+        preset_id_raw = (request.form.get("preset_id", "") or "").strip()
+        preset = ApartmentPreset.query.get(int(preset_id_raw)) if preset_id_raw.isdigit() else None
         rooms_raw = (request.form.get("rooms", "") or "").strip()
         rooms = int(rooms_raw) if rooms_raw else None
-        area = float(request.form["area"])
+        area_raw = (request.form.get("area", "") or "").strip()
+        area = float(area_raw) if area_raw else None
+        if preset:
+            rooms = int(preset.rooms)
+            area = float(preset.area)
+        if area is None:
+            flash("Sahə daxil edilməlidir.", "danger")
+            return redirect(url_for("admin_apartments"))
         owner_user_id = int(request.form["owner_user_id"])
         db.session.add(Apartment(number=number, floor=floor, rooms=rooms, area=area, owner_user_id=owner_user_id))
         db.session.commit()
