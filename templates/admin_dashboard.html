@@ -26,10 +26,9 @@
     <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
 </form>
 
-<div class="row row-cols-1 row-cols-sm-2 row-cols-lg-5 g-3 mb-4">
+<div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-6 g-3 mb-4">
     <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Menzil sayi</div><div class="h4">{{ apartments_count }}</div></div></div></div>
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Ümumi balans</div><div class="h4 text-danger">{{ total_debt|azn }}</div></div></div></div>
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Balans</div>
+    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Ümumi balans</div>
         {% if house_balance > 0 %}
             <div class="h4 text-success">+{{ house_balance|azn }}</div>
         {% elif house_balance < 0 %}
@@ -38,6 +37,10 @@
             <div class="h4 text-muted">{{ house_balance|azn }}</div>
         {% endif %}
     </div></div></div>
+    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Yığılmış məbləğ (seçilmiş dövr)</div>
+        <div class="h4 text-success">{{ apartment_payments_period|azn }}</div>
+    </div></div></div>
+    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Ümumi borc</div><div class="h4 text-danger">{{ total_debt|azn }}</div></div></div></div>
     <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Xərclər (ödənilmiş)</div><div class="h4 text-danger">{{ paid_expenses_total|azn }}</div></div></div></div>
     <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Xərclər (ödənilməmiş)</div><div class="h4 text-danger">{{ unpaid_expenses_total|azn }}</div></div></div></div>
 </div>
@@ -99,7 +102,7 @@
 
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
-        <h5>Ödənişlər / Xərclər / Balans</h5>
+        <h5>Ödənişlər / Xərclər / Net (seçilmiş dövr)</h5>
         <canvas id="paymentsChart" height="90"></canvas>
     </div>
 </div>
@@ -130,7 +133,7 @@
                 datasets: [
                     { label: "Ödənişlər (AZN)", data: {{ chart_payments|tojson }}, borderColor: "#198754", tension: 0.2 },
                     { label: "Xərclər (AZN)", data: {{ chart_expenses|tojson }}, borderColor: "#dc3545", tension: 0.2 },
-                    { label: "Balans (AZN)", data: {{ chart_balance|tojson }}, borderColor: "#0d6efd", tension: 0.2 }
+                    { label: "Net balans (dövr, AZN)", data: {{ chart_balance|tojson }}, borderColor: "#0d6efd", tension: 0.2 }
                 ]
             }
         });

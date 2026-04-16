@@ -996,13 +996,12 @@ def dashboard():
     unpaid_expenses_total = (
         db.session.query(db.func.sum(Expense.amount)).filter(Expense.is_paid == False).scalar() or 0
     )
-    income_period = (
+    apartment_payments_period = (
         db.session.query(db.func.sum(Payment.amount))
         .filter(Payment.status == "confirmed", Payment.created_at >= from_dt, Payment.created_at <= to_dt)
         .scalar()
         or 0
     )
-    topup_period = db.session.query(db.func.sum(BalanceTopUp.amount)).filter(BalanceTopUp.created_at >= from_dt, BalanceTopUp.created_at <= to_dt).scalar() or 0
     expenses_period = (
         db.session.query(db.func.sum(Expense.amount))
         .filter(Expense.is_paid == True, Expense.created_at >= from_dt, Expense.created_at <= to_dt)
@@ -1016,10 +1015,10 @@ def dashboard():
         apartments_count=apartments_count,
         total_debt=round(debt, 2),
         house_balance=house_balance,
+        apartment_payments_period=round(float(apartment_payments_period or 0), 2),
         expenses_period=round(float(expenses_period or 0), 2),
         paid_expenses_total=round(float(paid_expenses_total or 0), 2),
         unpaid_expenses_total=round(float(unpaid_expenses_total or 0), 2),
-        income_period=round(float(income_period or 0) + float(topup_period or 0), 2),
         pending_invoices=pending_invoices,
         recent_logs=recent_logs,
         from_date=from_dt.strftime("%Y-%m-%d"),
