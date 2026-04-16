@@ -2335,10 +2335,9 @@ def admin_reset_financial():
 
     # Delete in dependency order to avoid FK violations
     Payment.query.delete(synchronize_session=False)
-    # Reset invoices: clear paid amounts and revert status
-    for inv in Invoice.query.all():
-        inv.paid_amount = Decimal("0.00")
-        inv.status = "gozlemede"
+    # Remove all invoices (including future months) and expenses.
+    Invoice.query.delete(synchronize_session=False)
+    Expense.query.delete(synchronize_session=False)
     # Reset apartment credit balances
     for apt in Apartment.query.all():
         apt.credit_balance = Decimal("0.00")
@@ -2351,7 +2350,7 @@ def admin_reset_financial():
     db.session.add(AuditLog(actor_user_id=user.id, action="Bütün maliyyə məlumatları sıfırlandı (superadmin)"))
     db.session.commit()
 
-    flash("Bütün ödəniş, borc və tarixçə məlumatları sıfırlandı.", "success")
+    flash("Bütün ödəniş, hesab, xərc, borc və tarixçə məlumatları sıfırlandı.", "success")
     return redirect(url_for("admin_settings"))
 
 
