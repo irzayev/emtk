@@ -3,7 +3,7 @@ import re
 import smtplib
 import uuid
 from decimal import Decimal
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
@@ -47,7 +47,7 @@ db = SQLAlchemy(app)
 
 @app.context_processor
 def inject_now():
-    return {"now": datetime.utcnow}
+    return {"now": lambda: datetime.now(timezone.utc)}
 
 
 @app.template_filter("azn")
@@ -91,10 +91,11 @@ class ApartmentPreset(db.Model):
     name = db.Column(db.String(120), nullable=False)
     rooms = db.Column(db.Integer, nullable=False)
     area = db.Column(db.Float, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class TariffApartment(db.Model):
+    __table_args__ = (db.UniqueConstraint("tariff_id", "apartment_id", name="uq_tariff_apartment"),)
     id = db.Column(db.Integer, primary_key=True)
     tariff_id = db.Column(db.Integer, db.ForeignKey("tariff.id"), nullable=False)
     apartment_id = db.Column(db.Integer, db.ForeignKey("apartment.id"), nullable=False)
@@ -110,7 +111,7 @@ class Invoice(db.Model):
     amount = db.Column(db.Numeric(12, 2), nullable=False)
     paid_amount = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     status = db.Column(db.String(20), nullable=False, default="gozlemede")
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class Payment(db.Model):
@@ -122,7 +123,7 @@ class Payment(db.Model):
     status = db.Column(db.String(20), nullable=False, default="pending")  # pending | confirmed | rejected
     reviewer_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     reviewed_at = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class SmtpConfig(db.Model):
@@ -145,14 +146,14 @@ class WorkLog(db.Model):
     description = db.Column(db.Text, nullable=False)
     before_photo_url = db.Column(db.String(255), nullable=True)
     after_photo_url = db.Column(db.String(255), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class Announcement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     text = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class Poll(db.Model):
@@ -161,21 +162,22 @@ class Poll(db.Model):
     is_anonymous = db.Column(db.Boolean, nullable=False, default=True)
     is_open = db.Column(db.Boolean, nullable=False, default=True)
     result_visibility = db.Column(db.String(20), nullable=False, default="immediate")
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class Vote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     poll_id = db.Column(db.Integer, db.ForeignKey("poll.id"), nullable=False)
     apartment_id = db.Column(db.Integer, db.ForeignKey("apartment.id"), nullable=False)
-    choice = db.Column(db.String(50), nullable=False)
+    choice = db.Column(db.Enum("yes", "no", name="vote_choice"), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     actor_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     action = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class ExpenseTemplate(db.Model):
@@ -184,7 +186,7 @@ class ExpenseTemplate(db.Model):
     default_amount = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     is_recurring = db.Column(db.Boolean, nullable=False, default=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class Expense(db.Model):
@@ -197,7 +199,7 @@ class Expense(db.Model):
     template_id = db.Column(db.Integer, db.ForeignKey("expense_template.id"), nullable=True)
     template = db.relationship("ExpenseTemplate", backref="expenses")
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class BalanceTopUp(db.Model):
@@ -205,7 +207,7 @@ class BalanceTopUp(db.Model):
     amount = db.Column(db.Numeric(12, 2), nullable=False)
     comment = db.Column(db.String(255), nullable=True)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 def audit(action: str) -> None:
@@ -753,7 +755,7 @@ def current_user():
     user_id = session.get("user_id")
     if not user_id:
         return None
-    return User.query.get(user_id)
+    return db.session.get(User, user_id)
 
 
 def login_required(f):
@@ -816,6 +818,7 @@ def login():
 
 
 @app.route("/register", methods=["GET", "POST"])
+@limiter.limit("5 per minute")
 def register():
     if request.method == "POST":
         full_name = request.form["full_name"].strip()
@@ -941,7 +944,7 @@ def dashboard():
     from_date = request.args.get("from_date")
     to_date = request.args.get("to_date")
     from_dt = datetime.strptime(from_date, "%Y-%m-%d") if from_date else datetime(date.today().year, date.today().month, 1)
-    to_dt = datetime.strptime(to_date, "%Y-%m-%d") if to_date else datetime.utcnow()
+    to_dt = datetime.strptime(to_date, "%Y-%m-%d") if to_date else datetime.now(timezone.utc)
     apartments_count = Apartment.query.count()
     # Total debt should not be reduced by overpayments (credit) inside invoices,
     # but should be reduced by apartment credit balances.
@@ -1523,7 +1526,7 @@ def delete_expense(expense_id):
 def toggle_expense_paid(expense_id):
     e = Expense.query.get_or_404(expense_id)
     e.is_paid = not bool(e.is_paid)
-    e.paid_at = datetime.utcnow() if e.is_paid else None
+    e.paid_at = datetime.now(timezone.utc) if e.is_paid else None
     db.session.commit()
     audit(f"Xərc {'ödəndi' if e.is_paid else 'ödənilmədi'} #{e.id}: {e.name} {float(e.amount):.2f} period {e.period}")
     flash("Xərc statusu yeniləndi.", "success")
@@ -1601,7 +1604,7 @@ def confirm_payment(payment_id):
         result = _apply_payment_delta(invoice, apply_amount)
         payment.status = "confirmed"
         payment.reviewer_user_id = current_user().id
-        payment.reviewed_at = datetime.utcnow()
+        payment.reviewed_at = datetime.now(timezone.utc)
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -1634,7 +1637,7 @@ def reject_payment(payment_id):
 
     payment.status = "rejected"
     payment.reviewer_user_id = current_user().id
-    payment.reviewed_at = datetime.utcnow()
+    payment.reviewed_at = datetime.now(timezone.utc)
     db.session.commit()
     audit(f"Odenis imtina edildi #{payment.id}")
     flash("Odenis muracieti imtina edildi.", "warning")
@@ -1660,7 +1663,7 @@ def add_payment(invoice_id):
         return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
 
     apply_amount = amount
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # FIX (warning #1): same try/except guard as confirm_payment.
     try:
@@ -1908,7 +1911,8 @@ def resident_receipt(payment_id):
 def admin_content():
     content_type = request.args.get("type", "work")
     if request.method == "POST":
-        if request.form["form_type"] == "work":
+        form_type = request.form.get("form_type")
+        if form_type == "work":
             before_photo = save_uploaded_image(request.files.get("before_photo_file"))
             after_photo = save_uploaded_image(request.files.get("after_photo_file"))
             db.session.add(
@@ -1923,6 +1927,17 @@ def admin_content():
             flash("Is elave edildi.", "success")
             sysname = (get_smtp_config().system_name or "").strip() or "eMTK"
             notify_residents(f"{sysname}: Yeni isler", f"Yeni is elave edildi: {request.form['title'].strip()}")
+        elif form_type == "announcement":
+            title = request.form.get("title", "").strip()
+            text = request.form.get("text", "").strip()
+            if not title or not text:
+                flash("Başlıq və mətn vacibdir.", "danger")
+                return redirect(url_for("admin_content", type="announcement"))
+            db.session.add(Announcement(title=title, text=text))
+            audit("Yeni elan elave edildi")
+            flash("Elan elave edildi.", "success")
+            sysname = (get_smtp_config().system_name or "").strip() or "eMTK"
+            notify_residents(f"{sysname}: Yeni elan", f"Yeni elan: {title}")
         db.session.commit()
         return redirect(url_for("admin_content", type=content_type))
 
@@ -2257,7 +2272,7 @@ def print_invoice(invoice_id):
         resident=invoice.apartment.owner,
         cfg=cfg,
         system_name=(cfg.system_name or "").strip() or "eMTK",
-        issue_date=datetime.utcnow(),
+        issue_date=datetime.now(timezone.utc),
     )
 
 
@@ -2280,7 +2295,9 @@ def admin_settings():
             cfg.host = request.form.get("host", "").strip() or None
             cfg.port = int(request.form.get("port", "587"))
             cfg.username = request.form.get("username", "").strip() or None
-            cfg.password = request.form.get("password", "").strip() or None
+            new_password = request.form.get("password", "").strip()
+            if new_password:
+                cfg.password = new_password
             cfg.sender_email = request.form.get("sender_email", "").strip() or None
             cfg.use_tls = request.form.get("use_tls") == "on"
             db.session.commit()

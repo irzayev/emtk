@@ -89,7 +89,7 @@
             <div class="col-md-2"><label class="form-label">Port</label><input class="form-control" type="number" name="port" value="{{ cfg.port }}"></div>
             <div class="col-md-4"><label class="form-label">Gonderen email</label><input class="form-control" name="sender_email" value="{{ cfg.sender_email or '' }}"></div>
             <div class="col-md-6"><label class="form-label">Istifadeci adi</label><input class="form-control" name="username" value="{{ cfg.username or '' }}"></div>
-            <div class="col-md-6"><label class="form-label">Sifre</label><input class="form-control" type="password" name="password" value="{{ cfg.password or '' }}"></div>
+            <div class="col-md-6"><label class="form-label">Sifre</label><input class="form-control" type="password" name="password" placeholder="{{ '••••••••' if cfg.password else '' }}" autocomplete="new-password"><small class="text-muted">{% if cfg.password %}Mövcud şifrəni dəyişmək üçün yeni şifrə daxil edin, əks halda boş buraxın.{% endif %}</small></div>
             <div class="col-12 form-check mt-2">
                 <input class="form-check-input" type="checkbox" name="use_tls" {% if cfg.use_tls %}checked{% endif %}>
                 <label class="form-check-label">TLS istifade et</label>

@@ -72,7 +72,7 @@
                             {% endif %}
                         </td>
                         <td class="text-end">
-                            <form method="post" action="{{ url_for('delete_tariff', tariff_id=t.id) }}" onsubmit="return confirm('Удалить тариф?');">
+                            <form method="post" action="{{ url_for('delete_tariff', tariff_id=t.id) }}" onsubmit="return confirm('Bu tariifi silmək istədiyinizə əminsiniz?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button class="btn btn-sm btn-outline-danger">Sil</button>
                             </form>

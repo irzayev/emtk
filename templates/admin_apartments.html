@@ -55,7 +55,7 @@
                         </td>
                         <td class="text-end">
                             <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-apartment-{{ a.id }}">Redaktə et</button>
-                            <form method="post" action="{{ url_for('delete_apartment', apartment_id=a.id) }}" class="d-inline" onsubmit="return confirm('Удалить квартиру?');">
+                            <form method="post" action="{{ url_for('delete_apartment', apartment_id=a.id) }}" class="d-inline" onsubmit="return confirm('Bu mənzili silmək istədiyinizə əminsiniz?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button class="btn btn-sm btn-outline-danger">Sil</button>
                             </form>

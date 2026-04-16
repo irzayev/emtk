@@ -46,7 +46,7 @@
                     {% endif %}
                     <div class="mt-2 d-flex gap-2">
                         <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-worklog-{{ w.id }}">Redakte et</button>
-                        <form method="post" action="{{ url_for('delete_worklog', worklog_id=w.id) }}" onsubmit="return confirm('Удалить работу?');">
+                        <form method="post" action="{{ url_for('delete_worklog', worklog_id=w.id) }}" onsubmit="return confirm('Bu işi silmək istədiyinizə əminsiniz?');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button class="btn btn-sm btn-outline-danger">Sil</button>
                         </form>
@@ -77,6 +77,18 @@
         </div>
     </div>
     <div class="col-lg-6">
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body">
+                <h5>Elan əlavə et</h5>
+                <form method="post" class="vstack gap-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="form_type" value="announcement">
+                    <input class="form-control" name="title" placeholder="Başlıq" required>
+                    <textarea class="form-control" name="text" placeholder="Mətn" rows="3" required></textarea>
+                    <button class="btn btn-primary">Yadda saxla</button>
+                </form>
+            </div>
+        </div>
         <div class="card border-0 shadow-sm">
             <div class="card-body">
                 <h5>Elanlar</h5>
@@ -86,7 +98,7 @@
                     <div class="small text-muted">{{ a.text }}</div>
                     <div class="mt-2 d-flex gap-2">
                         <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-announcement-{{ a.id }}">Redakte et</button>
-                        <form method="post" action="{{ url_for('delete_announcement', announcement_id=a.id) }}" onsubmit="return confirm('Удалить объявление?');">
+                        <form method="post" action="{{ url_for('delete_announcement', announcement_id=a.id) }}" onsubmit="return confirm('Bu elanı silmək istədiyinizə əminsiniz?');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button class="btn btn-sm btn-outline-danger">Sil</button>
                         </form>
