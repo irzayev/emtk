@@ -1155,6 +1155,8 @@ def delete_apartment(apartment_id):
         return redirect(url_for("admin_apartments"))
 
     apartment_number = apartment.number
+    # Tariff scope rows reference apartment; remove them or FK commit fails (Postgres / SQLite with FKs).
+    TariffApartment.query.filter_by(apartment_id=apartment.id).delete(synchronize_session=False)
     db.session.delete(apartment)
     db.session.commit()
     audit(f"Menzil silindi {apartment_number}")
