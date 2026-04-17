@@ -84,14 +84,13 @@
         <h5 class="mb-3">Verilənlər bazası yedəyi</h5>
         {% if database_backup_supported %}
         <p class="text-muted small mb-3">
-            Tam SQLite nüsxəsi: istifadəçilər, mənzillər, məzmun, SMTP və sistem məlumatları, maliyyə və tarixçə.
-            PostgreSQL və ya yaddaşda saxlanan SQLite üçün bu bölmə əlçatan deyil.
+            Tam SQLite nüsxəsi
         </p>
         <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-            <a class="btn btn-outline-primary" href="{{ url_for('admin_database_export') }}">Yedəyi yüklə (.db)</a>
+            <a class="btn btn-outline-primary" href="{{ url_for('admin_database_export') }}">Backup</a>
             {% if session.get('role') == 'superadmin' %}
             <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#importDatabaseModal">
-                Yedəkdən bərpa et
+                Bərpa
             </button>
             {% endif %}
         </div>
