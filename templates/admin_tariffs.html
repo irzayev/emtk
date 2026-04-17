@@ -72,9 +72,61 @@
                             {% endif %}
                         </td>
                         <td class="text-end">
-                            <form method="post" action="{{ url_for('delete_tariff', tariff_id=t.id) }}" onsubmit="return confirm('Bu tariifi silmək istədiyinizə əminsiniz?');">
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline-secondary"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#edit-tariff-{{ t.id }}"
+                            >
+                                Redaktə et
+                            </button>
+                            <form method="post" action="{{ url_for('delete_tariff', tariff_id=t.id) }}" class="d-inline" onsubmit="return confirm('Bu tariifi silmək istədiyinizə əminsiniz?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button class="btn btn-sm btn-outline-danger">Sil</button>
+                            </form>
+                        </td>
+                    </tr>
+                    <tr class="collapse" id="edit-tariff-{{ t.id }}">
+                        <td colspan="6" class="bg-light">
+                            <form method="post" action="{{ url_for('update_tariff', tariff_id=t.id) }}" class="row g-2 align-items-end">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="col-md-3">
+                                    <label class="form-label">Ad</label>
+                                    <input class="form-control" name="name" value="{{ t.name }}" required>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Tip</label>
+                                    <select class="form-select" name="type" required>
+                                        <option value="per_m2" {% if t.type == "per_m2" %}selected{% endif %}>Dəyişən (m2)</option>
+                                        <option value="fixed" {% if t.type == "fixed" %}selected{% endif %}>Sabit</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Məbləğ (AZN)</label>
+                                    <input class="form-control" name="amount" type="number" step="0.01" min="0.01" value="{{ t.amount }}" required>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="form-check mt-4">
+                                        <input class="form-check-input js-edit-apply-all" type="checkbox" name="apply_all" id="edit_apply_all_{{ t.id }}" data-tariff-id="{{ t.id }}" {% if not scope_map.get(t.id) %}checked{% endif %}>
+                                        <label class="form-check-label" for="edit_apply_all_{{ t.id }}">Hamısı</label>
+                                    </div>
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" name="is_active" id="edit_is_active_{{ t.id }}" {% if t.is_active %}checked{% endif %}>
+                                        <label class="form-check-label" for="edit_is_active_{{ t.id }}">Aktiv</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Mənzillər</label>
+                                    <select class="form-select js-edit-apartment-ids" name="apartment_ids" id="edit_apartment_ids_{{ t.id }}" multiple>
+                                        {% set selected_scope = scope_map.get(t.id, set()) %}
+                                        {% for a in apartments %}
+                                        <option value="{{ a.id }}" {% if a.id in selected_scope %}selected{% endif %}>{{ a.number }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-12 d-flex justify-content-end">
+                                    <button class="btn btn-primary btn-sm">Yadda saxla</button>
+                                </div>
                             </form>
                         </td>
                     </tr>
@@ -97,6 +149,17 @@
         };
         if (cb) cb.addEventListener("change", sync);
         sync();
+
+        document.querySelectorAll(".js-edit-apply-all").forEach(function (checkbox) {
+            const tariffId = checkbox.dataset.tariffId;
+            const scopeSelect = document.getElementById("edit_apartment_ids_" + tariffId);
+            if (!scopeSelect) return;
+            const syncEdit = function () {
+                scopeSelect.disabled = checkbox.checked;
+            };
+            checkbox.addEventListener("change", syncEdit);
+            syncEdit();
+        });
     })();
 </script>
 {% endblock %}

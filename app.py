@@ -1324,6 +1324,51 @@ def delete_tariff(tariff_id):
     return redirect(url_for("admin_tariffs"))
 
 
+@app.route("/admin/tariffs/update/<int:tariff_id>", methods=["POST"])
+@login_required
+@role_required("komendant", "superadmin")
+def update_tariff(tariff_id):
+    tariff = Tariff.query.get_or_404(tariff_id)
+
+    name = (request.form.get("name", "") or "").strip()
+    tariff_type = (request.form.get("type", "") or "").strip()
+    amount_raw = (request.form.get("amount", "") or "").strip()
+    is_active = request.form.get("is_active") == "on"
+
+    if not name:
+        flash("Tarif adı boş ola bilməz.", "danger")
+        return redirect(url_for("admin_tariffs"))
+    if tariff_type not in ("per_m2", "fixed"):
+        flash("Tarif tipi düzgün seçilməyib.", "danger")
+        return redirect(url_for("admin_tariffs"))
+    try:
+        amount = float(amount_raw)
+    except ValueError:
+        flash("Məbləğ düzgün daxil edilməyib.", "danger")
+        return redirect(url_for("admin_tariffs"))
+    if amount <= 0:
+        flash("Məbləğ sıfırdan böyük olmalıdır.", "danger")
+        return redirect(url_for("admin_tariffs"))
+
+    tariff.name = name
+    tariff.type = tariff_type
+    tariff.amount = amount
+    tariff.is_active = is_active
+
+    apply_all = request.form.get("apply_all") == "on"
+    TariffApartment.query.filter_by(tariff_id=tariff.id).delete(synchronize_session=False)
+    if not apply_all:
+        apartment_ids = request.form.getlist("apartment_ids")
+        for apt_id in apartment_ids:
+            if apt_id.isdigit():
+                db.session.add(TariffApartment(tariff_id=tariff.id, apartment_id=int(apt_id)))
+
+    db.session.commit()
+    audit(f"Tarif yenilendi {tariff.name}")
+    flash("Tarif yeniləndi.", "success")
+    return redirect(url_for("admin_tariffs"))
+
+
 @app.route("/admin/invoices/generate", methods=["POST"])
 @login_required
 @role_required("komendant", "superadmin")
