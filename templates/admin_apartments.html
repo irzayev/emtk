@@ -211,6 +211,10 @@
                     el.disabled = !editing;
                 }
             });
+            // Area field lives inside a .js-apartment-edit wrapper; enable/disable nested inputs too.
+            row.querySelectorAll(".js-apartment-edit input, .js-apartment-edit select").forEach(el => {
+                el.disabled = !editing;
+            });
 
             if (saveBtn) saveBtn.classList.toggle("d-none", !editing);
             if (cancelBtn) cancelBtn.classList.toggle("d-none", !editing);
