@@ -2,6 +2,7 @@
 {% block content %}
 <div class="d-flex justify-content-between mb-3">
     <h3>Ödənişlər</h3>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard') }}">Geri</a>
     <form method="post" action="{{ url_for('generate_invoices') }}" class="d-flex gap-2">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <select class="form-select form-select-sm" name="period_mode">
