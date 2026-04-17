@@ -5,6 +5,7 @@ import uuid
 from io import BytesIO
 from decimal import Decimal
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
@@ -49,6 +50,24 @@ csrf = CSRFProtect(app)
 # Basic rate limiting (in-memory). For multi-instance production, use Redis storage.
 limiter = Limiter(get_remote_address, app=app, default_limits=[])
 db = SQLAlchemy(app)
+
+
+def _app_timezone():
+    """IANA timezone for displaying stored UTC timestamps (env TZ, default Asia/Baku)."""
+    tz_name = (os.getenv("TZ") or "Asia/Baku").strip()
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        return timezone.utc
+
+
+def utc_to_local(dt: Optional[datetime]) -> datetime:
+    """Convert app UTC datetimes to local wall time (server zone)."""
+    if dt is None:
+        dt = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_app_timezone())
 
 
 @app.context_processor
@@ -776,7 +795,7 @@ def build_invoice_email(invoice, resident, cfg):
         resident=resident,
         cfg=cfg,
         system_name=system_name,
-        issue_date=datetime.now(timezone.utc),
+        issue_date=utc_to_local(invoice.created_at),
     )
     return subject, plain_body, html_body
 
@@ -2685,7 +2704,7 @@ def print_invoice(invoice_id):
         resident=invoice.apartment.owner,
         cfg=cfg,
         system_name=(cfg.system_name or "").strip() or "eMTK",
-        issue_date=datetime.now(timezone.utc),
+        issue_date=utc_to_local(invoice.created_at),
     )
 
 
