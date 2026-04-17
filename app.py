@@ -760,18 +760,6 @@ def parse_login_identifier(raw: str):
     return None, None
 
 
-def can_view_poll_results(user, poll_obj, voted):
-    if user.role in ("komendant", "superadmin"):
-        return True
-    if poll_obj.result_visibility == "immediate":
-        return True
-    if poll_obj.result_visibility == "after_vote":
-        return voted
-    if poll_obj.result_visibility == "after_close":
-        return not poll_obj.is_open
-    return False
-
-
 def current_user():
     user_id = session.get("user_id")
     if not user_id:
@@ -944,7 +932,6 @@ def dashboard():
                 .all()
             )
         works = WorkLog.query.order_by(WorkLog.created_at.desc()).limit(5).all()
-        polls = Poll.query.filter_by(is_open=True).order_by(Poll.created_at.desc()).all()
         return render_template(
             "resident_dashboard.html",
             apartment=apartment,
@@ -958,7 +945,6 @@ def dashboard():
             recent_expenses=recent_expenses,
             receipt_by_invoice=receipt_by_invoice,
             works=works,
-            polls=polls,
             payment_history=payment_history,
         )
 
@@ -1191,24 +1177,23 @@ def delete_apartment(apartment_id):
     has_invoices = bool(
         db.session.scalar(select(exists().where(Invoice.apartment_id == apartment.id)))
     )
-    has_votes = bool(
-        db.session.scalar(select(exists().where(Vote.apartment_id == apartment.id)))
-    )
-    if has_invoices or has_votes:
-        flash("Menzili silmek olmur: bagli hesab ve ya sesler var.", "warning")
+    if has_invoices:
+        flash("Menzili silmek olmur: bagli hesab var.", "warning")
         return redirect(url_for("admin_apartments"))
 
     apartment_number = apartment.number
     apt_pk = apartment.id
     # Core DELETEs: avoid ORM session.delete(apartment), which can touch relationships / flush order.
     try:
+        # Polls are deprecated; cleanup orphan votes before apartment delete.
+        db.session.execute(sa_delete(Vote).where(Vote.apartment_id == apt_pk))
         db.session.execute(sa_delete(TariffApartment).where(TariffApartment.apartment_id == apt_pk))
         db.session.execute(sa_delete(Apartment).where(Apartment.id == apt_pk))
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
         app.logger.exception("delete_apartment integrity error apartment_id=%s", apartment_id)
-        flash("Menzil silinmədi: bağlı qeydlər var (məsələn, hesab və ya səs).", "danger")
+        flash("Menzil silinmədi: bağlı qeydlər var (məsələn, hesab).", "danger")
         return redirect(url_for("admin_apartments"))
     except SQLAlchemyError:
         db.session.rollback()
@@ -2272,75 +2257,8 @@ def admin_user_delete(user_id):
 @app.route("/polls", methods=["GET", "POST"])
 @login_required
 def polls():
-    user = current_user()
-    apartment = Apartment.query.filter_by(owner_user_id=user.id).first() if user.role == "resident" else None
-
-    if request.method == "POST":
-        if user.role in ("komendant", "superadmin") and request.form["form_type"] == "create_poll":
-            db.session.add(
-                Poll(
-                    title=request.form["title"].strip(),
-                    is_anonymous=request.form.get("is_anonymous") == "on",
-                    is_open=True,
-                    result_visibility=request.form.get("result_visibility", "immediate"),
-                )
-            )
-            db.session.commit()
-            audit("Sorgu yaradildi")
-            flash("Sorgu yaradildi.", "success")
-            sysname = (get_smtp_config().system_name or "").strip() or "eMTK"
-            notify_residents(f"{sysname}: Yeni sorgu", f"Yeni sorgu yaradildi: {request.form['title'].strip()}")
-        elif user.role in ("komendant", "superadmin") and request.form["form_type"] == "toggle_poll_status":
-            poll_id = int(request.form["poll_id"])
-            poll = Poll.query.get_or_404(poll_id)
-            poll.is_open = not poll.is_open
-            db.session.commit()
-            audit(f"{'Acilib' if poll.is_open else 'Baglanib'} sorgu #{poll_id}")
-            flash("Sorgunun statusu yenilendi.", "success")
-        elif user.role in ("komendant", "superadmin") and request.form["form_type"] == "delete_poll":
-            poll_id = int(request.form["poll_id"])
-            poll = Poll.query.get_or_404(poll_id)
-            poll_title = poll.title
-            Vote.query.filter_by(poll_id=poll.id).delete(synchronize_session=False)
-            db.session.delete(poll)
-            db.session.commit()
-            audit(f"Sorgu silindi #{poll_id}: {poll_title}")
-            flash("Sorgu silindi.", "success")
-        elif user.role == "resident":
-            poll_id = int(request.form["poll_id"])
-            choice = request.form["choice"]
-            existing = Vote.query.filter_by(poll_id=poll_id, apartment_id=apartment.id).first()
-            if existing:
-                flash("Bu sorguda artiq ses vermisiniz.", "warning")
-            else:
-                db.session.add(Vote(poll_id=poll_id, apartment_id=apartment.id, choice=choice))
-                db.session.commit()
-                flash("Sizin sesiniz qeyde alindi.", "success")
-        return redirect(url_for("polls"))
-
-    poll_rows = Poll.query.order_by(Poll.created_at.desc()).all()
-    poll_data = []
-    for p in poll_rows:
-        yes_votes = Vote.query.filter_by(poll_id=p.id, choice="yes").count()
-        no_votes = Vote.query.filter_by(poll_id=p.id, choice="no").count()
-        voted = False
-        user_choice = None
-        if apartment:
-            vote = Vote.query.filter_by(poll_id=p.id, apartment_id=apartment.id).first()
-            voted = vote is not None
-            user_choice = vote.choice if vote else None
-        poll_data.append(
-            {
-                "poll": p,
-                "yes": yes_votes,
-                "no": no_votes,
-                "voted": voted,
-                "user_choice": user_choice,
-                "can_view_results": can_view_poll_results(user, p, voted),
-            }
-        )
-
-    return render_template("polls.html", poll_data=poll_data, user=user)
+    flash("Sorğular və səsvermələr funksiyası deaktiv edilib.", "info")
+    return redirect(url_for("dashboard"))
 
 
 @app.route("/admin/invoices/send/<int:invoice_id>", methods=["POST"])

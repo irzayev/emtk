@@ -2,7 +2,6 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Sakin paneli</h3>
-    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('polls') }}">Səsvermələr</a>
 </div>
 {% if apartments %}
 <form method="post" action="{{ url_for('select_apartment') }}" class="mb-3 d-flex gap-2 align-items-center">
@@ -200,21 +199,6 @@
                     </div>
                 {% else %}
                     <div class="text-muted">Qeyd yoxdur.</div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body">
-                <h5>Aktiv səsvermələr</h5>
-                {% for p in polls %}
-                    <div class="d-flex justify-content-between border rounded p-2 mb-2">
-                        <div>{{ p.title }}</div>
-                        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('polls') }}">Ac</a>
-                    </div>
-                {% else %}
-                    <div class="text-muted">Səsvermə yoxdur.</div>
                 {% endfor %}
             </div>
         </div>
