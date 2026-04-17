@@ -47,12 +47,12 @@
 
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
-        <h5 class="mb-2">Balans artırma</h5>
+        <h5 class="mb-2">Mədaxil (balans dəyişikliyi)</h5>
         <form method="post" action="{{ url_for('balance_topup') }}" class="row g-2 align-items-end">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="col-md-2">
                 <label class="form-label">Məbləğ</label>
-                <input class="form-control" type="number" step="0.01" min="0.01" max="9999" name="amount" required>
+                <input class="form-control" type="number" step="0.01" min="-9999" max="9999" name="amount" required>
             </div>
             <div class="col-md-8">
                 <label class="form-label">Şərh</label>
@@ -62,7 +62,7 @@
                 <button class="btn btn-success w-100">Mədaxil</button>
             </div>
         </form>
-        <div class="small text-muted mt-2">Ümumi balansa əlavə olunur.</div>
+        <div class="small text-muted mt-2">Müsbət məbləğ ümumi balansı artırır; mənfi məbləğ azaldır (məs: −51 AZN + Mədaxil −50 → −101 AZN).</div>
     </div>
 </div>
 
