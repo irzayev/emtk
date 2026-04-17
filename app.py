@@ -1,3 +1,4 @@
+import calendar
 import os
 import re
 import shutil
@@ -7,7 +8,7 @@ import tempfile
 import uuid
 from io import BytesIO
 from decimal import Decimal
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from email.message import EmailMessage
 from functools import wraps
@@ -73,6 +74,24 @@ def _app_timezone():
         return ZoneInfo(tz_name)
     except Exception:
         return timezone.utc
+
+
+def month_sql_expr(column):
+    """
+    Portable SQL expression that formats a datetime column as 'YYYY-MM'.
+    Подбирает функцию под текущий диалект БД:
+    - SQLite     -> strftime('%Y-%m', col)
+    - PostgreSQL -> to_char(col, 'YYYY-MM')
+    - прочие     -> fallback через EXTRACT + LPAD + конкатенация.
+    """
+    dialect = db.engine.dialect.name
+    if dialect == "sqlite":
+        return db.func.strftime("%Y-%m", column)
+    if dialect in ("postgresql", "postgres"):
+        return db.func.to_char(column, "YYYY-MM")
+    year = db.func.lpad(db.cast(db.func.extract("year", column), db.String), 4, "0")
+    month = db.func.lpad(db.cast(db.func.extract("month", column), db.String), 2, "0")
+    return year.op("||")(db.literal("-")).op("||")(month)
 
 
 def utc_to_local(dt: Optional[datetime]) -> datetime:
@@ -1171,10 +1190,25 @@ def dashboard():
             payment_history=payment_history,
         )
 
-    from_date = request.args.get("from_date")
-    to_date = request.args.get("to_date")
-    from_dt = datetime.strptime(from_date, "%Y-%m-%d") if from_date else datetime(date.today().year, date.today().month, 1)
-    to_dt = datetime.strptime(to_date, "%Y-%m-%d") if to_date else datetime.now(timezone.utc)
+    # Normalize the filter range:
+    # - оба значения приводим к aware UTC, чтобы совпадать с Payment.created_at;
+    # - to_dt используем как ПРАВУЮ границу (эксклюзивно, начало следующего дня),
+    #   иначе теряются записи, созданные в сам день to_date после 00:00.
+    from_date_raw = request.args.get("from_date")
+    to_date_raw = request.args.get("to_date")
+
+    def _parse_date(value):
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date() if value else None
+        except ValueError:
+            return None
+
+    today = date.today()
+    from_date_obj = _parse_date(from_date_raw) or date(today.year, today.month, 1)
+    to_date_obj = _parse_date(to_date_raw) or today
+
+    from_dt = datetime.combine(from_date_obj, time.min, tzinfo=timezone.utc)
+    to_dt_exclusive = datetime.combine(to_date_obj, time.min, tzinfo=timezone.utc) + timedelta(days=1)
     apartments_count = Apartment.query.count()
     # Total debt should not be reduced by overpayments (credit) inside invoices,
     # but should be reduced by apartment credit balances.
@@ -1185,7 +1219,7 @@ def dashboard():
     pending_invoices = Invoice.query.filter(Invoice.status != "odenilib").count()
     recent_logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(10).all()
     period_payments = Payment.query.filter(
-        Payment.status == "confirmed", Payment.created_at >= from_dt, Payment.created_at <= to_dt
+        Payment.status == "confirmed", Payment.created_at >= from_dt, Payment.created_at < to_dt_exclusive
     ).order_by(Payment.created_at.asc()).all()
     payment_table = []
     for p in period_payments:
@@ -1202,7 +1236,7 @@ def dashboard():
         key = p.created_at.strftime("%Y-%m-%d")
         payments_by_day[key] = payments_by_day.get(key, 0) + float(p.amount)
 
-    period_topups = BalanceTopUp.query.filter(BalanceTopUp.created_at >= from_dt, BalanceTopUp.created_at <= to_dt).order_by(BalanceTopUp.created_at.asc()).all()
+    period_topups = BalanceTopUp.query.filter(BalanceTopUp.created_at >= from_dt, BalanceTopUp.created_at < to_dt_exclusive).order_by(BalanceTopUp.created_at.asc()).all()
     topups_by_day = {}
     for t in period_topups:
         key = t.created_at.strftime("%Y-%m-%d")
@@ -1212,7 +1246,7 @@ def dashboard():
 
     period_expenses = (
         Expense.query.filter(
-            Expense.created_at >= from_dt, Expense.created_at <= to_dt, Expense.is_paid == True
+            Expense.created_at >= from_dt, Expense.created_at < to_dt_exclusive, Expense.is_paid == True
         )
         .order_by(Expense.created_at.asc())
         .all()
@@ -1257,13 +1291,13 @@ def dashboard():
     )
     apartment_payments_period = (
         db.session.query(db.func.sum(Payment.amount))
-        .filter(Payment.status == "confirmed", Payment.created_at >= from_dt, Payment.created_at <= to_dt)
+        .filter(Payment.status == "confirmed", Payment.created_at >= from_dt, Payment.created_at < to_dt_exclusive)
         .scalar()
         or 0
     )
     expenses_period = (
         db.session.query(db.func.sum(Expense.amount))
-        .filter(Expense.is_paid == True, Expense.created_at >= from_dt, Expense.created_at <= to_dt)
+        .filter(Expense.is_paid == True, Expense.created_at >= from_dt, Expense.created_at < to_dt_exclusive)
         .scalar()
         or 0
     )
@@ -1280,8 +1314,8 @@ def dashboard():
         unpaid_expenses_total=round(float(unpaid_expenses_total or 0), 2),
         pending_invoices=pending_invoices,
         recent_logs=recent_logs,
-        from_date=from_dt.strftime("%Y-%m-%d"),
-        to_date=to_dt.strftime("%Y-%m-%d"),
+        from_date=from_date_obj.strftime("%Y-%m-%d"),
+        to_date=to_date_obj.strftime("%Y-%m-%d"),
         payment_table=payment_table,
         chart_labels=chart_labels,
         chart_payments=chart_payments,
@@ -1870,10 +1904,36 @@ def update_expense(expense_id):
         return redirect(url_for("admin_expenses", period=e.period))
 
     old = f"{e.period} {e.name} {float(e.amount):.2f}"
+    period_changed = period != e.period
     e.period = period
     e.name = name
     e.category = category
     e.amount = round(amount, 2)
+    # Если период сменили, синхронизируем created_at так, чтобы расход
+    # попадал в тот же месяц на странице «Tarixçə» (фильтр по created_at),
+    # что и на странице «Xərclər» (фильтр по period).
+    if period_changed:
+        try:
+            target_year, target_month = (int(x) for x in period.split("-"))
+        except ValueError:
+            target_year = target_month = None
+        if target_year and target_month:
+            base = e.created_at or datetime.now(timezone.utc)
+            if base.tzinfo is None:
+                base = base.replace(tzinfo=timezone.utc)
+            # День ограничиваем последним днём целевого месяца.
+            last_day = calendar.monthrange(target_year, target_month)[1]
+            e.created_at = base.replace(
+                year=target_year, month=target_month, day=min(base.day, last_day)
+            )
+            # paid_at тоже согласуем, если расход уже помечен оплаченным.
+            if e.is_paid and e.paid_at is not None:
+                paid_base = e.paid_at
+                if paid_base.tzinfo is None:
+                    paid_base = paid_base.replace(tzinfo=timezone.utc)
+                e.paid_at = paid_base.replace(
+                    year=target_year, month=target_month, day=min(paid_base.day, last_day)
+                )
     db.session.commit()
     audit(f"Xərc yeniləndi #{e.id}: {old} -> {e.period} {e.name} {float(e.amount):.2f}")
     flash("Xərc yeniləndi.", "success")
@@ -2172,13 +2232,13 @@ def _get_admin_invoices_view_data(selected_period: str, building_id: Optional[in
 
 def _get_admin_history_view_data(selected_month: str, building_id: Optional[int] = None):
     month_rows = (
-        db.session.query(db.func.strftime("%Y-%m", Payment.created_at).label("month"))
+        db.session.query(month_sql_expr(Payment.created_at).label("month"))
         .filter(Payment.status == "confirmed", Payment.created_at.isnot(None))
         .union(
-            db.session.query(db.func.strftime("%Y-%m", BalanceTopUp.created_at).label("month")).filter(
+            db.session.query(month_sql_expr(BalanceTopUp.created_at).label("month")).filter(
                 BalanceTopUp.created_at.isnot(None)
             ),
-            db.session.query(db.func.strftime("%Y-%m", Expense.created_at).label("month")).filter(
+            db.session.query(month_sql_expr(Expense.created_at).label("month")).filter(
                 Expense.created_at.isnot(None)
             ),
         )
@@ -2195,8 +2255,12 @@ def _get_admin_history_view_data(selected_month: str, building_id: Optional[int]
     month_end = None
     if selected_month:
         year, month = [int(x) for x in selected_month.split("-")]
-        month_start = datetime(year, month, 1)
-        month_end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+        month_start = datetime(year, month, 1, tzinfo=timezone.utc)
+        month_end = (
+            datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+            if month == 12
+            else datetime(year, month + 1, 1, tzinfo=timezone.utc)
+        )
 
     limit = 500
     payments_query = (
@@ -2259,7 +2323,19 @@ def _get_admin_history_view_data(selected_month: str, building_id: Optional[int]
             }
         )
 
-    events.sort(key=lambda x: x["dt"] or datetime.min, reverse=True)
+    # Сортировка устойчива к смеси naive/aware и к None:
+    # naive значения трактуем как UTC, отсутствующие — как -inf.
+    _min_dt = datetime.min.replace(tzinfo=timezone.utc)
+
+    def _sort_key(ev):
+        dt = ev.get("dt")
+        if dt is None:
+            return _min_dt
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+
+    events.sort(key=_sort_key, reverse=True)
     events = events[:limit]
 
     prev_month = None

@@ -73,7 +73,13 @@
         <div class="card metric-card border-0 shadow-sm">
             <div class="card-body">
                 <div class="text-muted small">Ümumi borc (bina)</div>
-                <div class="h5 mb-0 text-danger">{{ house_total_debt|azn }}</div>
+                {% if house_total_debt > 0 %}
+                    <div class="h5 mb-0 text-danger">{{ house_total_debt|azn }}</div>
+                {% elif house_total_debt < 0 %}
+                    <div class="h5 mb-0 text-success">+{{ (house_total_debt * -1)|azn }}</div>
+                {% else %}
+                    <div class="h5 mb-0 text-muted">{{ house_total_debt|azn }}</div>
+                {% endif %}
             </div>
         </div>
     </div>
