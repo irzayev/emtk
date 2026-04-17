@@ -13,6 +13,8 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -552,6 +554,7 @@ _did_role_migration = False
 _did_money_migration = False
 _did_default_superadmin_seed = False
 _did_apartment_schema_migration = False
+_did_tariff_scope_schema = False
 
 
 def ensure_default_superadmin_seed():
@@ -576,6 +579,7 @@ def _run_role_migration_once():
     global _did_money_migration
     global _did_default_superadmin_seed
     global _did_apartment_schema_migration
+    global _did_tariff_scope_schema
     if not _did_money_migration:
         try:
             ensure_money_numeric_schema()
@@ -592,6 +596,12 @@ def _run_role_migration_once():
             ensure_apartment_preset_schema()
         finally:
             _did_apartment_schema_migration = True
+    # Runs on every worker (unlike if __name__ == "__main__"); needed for gunicorn / missing tables.
+    if not _did_tariff_scope_schema:
+        try:
+            ensure_tariff_scope_schema()
+        finally:
+            _did_tariff_scope_schema = True
     if _did_default_superadmin_seed:
         return
     try:
@@ -625,10 +635,10 @@ def ensure_balance_schema():
 
 
 def ensure_tariff_scope_schema():
-    with db.engine.connect() as conn:
-        tables = {row[0] for row in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'")}
-        if "tariff_apartment" not in tables:
-            db.create_all()
+    # Use Inspector so this works on SQLite and PostgreSQL (not only sqlite_master).
+    inspector = sa_inspect(db.engine)
+    if not inspector.has_table("tariff_apartment"):
+        db.create_all()
 
 
 def compute_invoice_amount(apartment, active_tariffs, scope_map):
@@ -1156,10 +1166,26 @@ def delete_apartment(apartment_id):
 
     apartment_number = apartment.number
     # Tariff scope rows reference apartment; remove them or FK commit fails (Postgres / SQLite with FKs).
-    TariffApartment.query.filter_by(apartment_id=apartment.id).delete(synchronize_session=False)
-    db.session.delete(apartment)
-    db.session.commit()
-    audit(f"Menzil silindi {apartment_number}")
+    try:
+        TariffApartment.query.filter_by(apartment_id=apartment.id).delete(synchronize_session=False)
+        db.session.delete(apartment)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        app.logger.exception("delete_apartment integrity error apartment_id=%s", apartment_id)
+        flash("Menzil silinmədi: bağlı qeydlər var (məsələn, hesab və ya səs).", "danger")
+        return redirect(url_for("admin_apartments"))
+    except SQLAlchemyError:
+        db.session.rollback()
+        app.logger.exception("delete_apartment database error apartment_id=%s", apartment_id)
+        flash("Menzil silinmədi: verilənlər bazası xətası.", "danger")
+        return redirect(url_for("admin_apartments"))
+
+    try:
+        audit(f"Menzil silindi {apartment_number}")
+    except Exception:
+        # Delete already committed; avoid 500 if audit log insert fails.
+        app.logger.exception("audit after delete_apartment failed apartment_id=%s", apartment_id)
     flash("Menzil silindi.", "success")
     return redirect(url_for("admin_apartments"))
 
