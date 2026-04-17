@@ -24,7 +24,7 @@
                 <div class="row g-3 mb-3">
                     <div class="col-lg-6">
                         <div class="border rounded p-3 h-100">
-                            <h6 class="mb-3">Sabit (şablon) xərc əlavə et</h6>
+                            <h6 class="mb-3">Aylıq (şablon) xərc əlavə et</h6>
                             <form method="post" class="row g-2">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="form_type" value="add_template">
@@ -193,7 +193,7 @@
                                 <td class="text-muted small">{{ e.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
                                 <td>
                                     {% if e.template_id %}
-                                        <span class="badge bg-primary-subtle text-primary">Sabit</span>
+                                        <span class="badge bg-primary-subtle text-primary">Aylıq</span>
                                     {% else %}
                                         <span class="badge bg-secondary-subtle text-secondary">Birdəfəlik</span>
                                     {% endif %}
@@ -260,7 +260,7 @@
                     </table>
                 </div>
                 <div class="small text-muted">
-                    Sabit və birdəfəlik xərclər bir yerdə idarə olunur. Sabit şablonlar “Hesabları yarat” zamanı cari aya düşür, birdəfəlik xərclər isə əl ilə əlavə olunur.
+                    Aylıq və birdəfəlik xərclər bir yerdə idarə olunur. Aylıq şablonlar “Hesabları yarat” zamanı cari aya düşür, birdəfəlik xərclər isə əl ilə əlavə olunur.
                 </div>
             </div>
         </div>

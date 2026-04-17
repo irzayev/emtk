@@ -2236,7 +2236,7 @@ def export_expenses():
     rows = [
         [
             e.created_at.strftime("%d.%m.%Y %H:%M") if e.created_at else "",
-            "Sabit" if e.template_id else "Birdəfəlik",
+            "Aylıq" if e.template_id else "Birdəfəlik",
             e.category or "",
             e.name,
             _amount_to_text(e.amount),
@@ -2339,7 +2339,7 @@ def print_expenses():
     rows = [
         [
             e.created_at.strftime("%d.%m.%Y %H:%M") if e.created_at else "",
-            "Sabit" if e.template_id else "Birdəfəlik",
+            "Aylıq" if e.template_id else "Birdəfəlik",
             e.category or "",
             e.name,
             _amount_to_text(e.amount),
