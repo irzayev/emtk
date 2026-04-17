@@ -1976,10 +1976,12 @@ def _get_admin_expenses_view_data(period: str):
     templates = ExpenseTemplate.query.order_by(ExpenseTemplate.is_active.desc(), ExpenseTemplate.name.asc()).all()
     expenses = Expense.query.filter_by(period=period).order_by(Expense.created_at.desc()).all()
     template_expense_by_template_id = {e.template_id: e for e in expenses if e.template_id}
+    one_off_expenses = [e for e in expenses if not e.template_id]
     total = round(sum(e.amount for e in expenses), 2)
     return {
         "templates": templates,
         "expenses": expenses,
+        "one_off_expenses": one_off_expenses,
         "period": period,
         "expenses_total": total,
         "template_expense_by_template_id": template_expense_by_template_id,
