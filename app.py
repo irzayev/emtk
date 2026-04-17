@@ -1124,9 +1124,9 @@ def admin_apartments():
             flash("Nömrə 1-4 simvol olmalıdır.", "danger")
             return redirect(url_for("admin_apartments"))
         try:
-            floor = _parse_int_field(request.form.get("floor"), min_value=1, max_value=999)
+            floor = _parse_int_field(request.form.get("floor"), min_value=-999, max_value=999)
         except ValueError:
-            flash("Mərtəbə 1-999 aralığında olmalıdır.", "danger")
+            flash("Mərtəbə -999 ilə 999 aralığında olmalıdır.", "danger")
             return redirect(url_for("admin_apartments"))
         preset_id_raw = (request.form.get("preset_id", "") or "").strip()
         preset = ApartmentPreset.query.get(int(preset_id_raw)) if preset_id_raw.isdigit() else None
@@ -1240,9 +1240,9 @@ def update_apartment(apartment_id):
         flash("Nömrə 1-4 simvol olmalıdır.", "danger")
         return redirect(url_for("admin_apartments"))
     try:
-        floor = _parse_int_field(request.form.get("floor"), min_value=1, max_value=999)
+        floor = _parse_int_field(request.form.get("floor"), min_value=-999, max_value=999)
     except ValueError:
-        flash("Mərtəbə 1-999 aralığında olmalıdır.", "danger")
+        flash("Mərtəbə -999 ilə 999 aralığında olmalıdır.", "danger")
         return redirect(url_for("admin_apartments"))
     rooms_raw = (request.form.get("rooms", "") or "").strip()
     try:
