@@ -14,7 +14,7 @@ from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import exists, inspect as sa_inspect, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -1159,14 +1159,13 @@ def admin_apartments():
 @role_required("komendant", "superadmin")
 def delete_apartment(apartment_id):
     apartment = Apartment.query.get_or_404(apartment_id)
-    # COUNT avoids loading full ORM rows (Vote enum / invoice edge cases on some DBs).
-    try:
-        has_invoices = Invoice.query.filter_by(apartment_id=apartment.id).count() > 0
-        has_votes = Vote.query.filter_by(apartment_id=apartment.id).count() > 0
-    except SQLAlchemyError:
-        app.logger.exception("delete_apartment precheck failed apartment_id=%s", apartment_id)
-        flash("Menzil silinmədi: hesab/səs yoxlanışı alınmadı.", "danger")
-        return redirect(url_for("admin_apartments"))
+    # SQLAlchemy 2.x: avoid legacy Query.count() (can raise in some setups); use EXISTS + scalar().
+    has_invoices = bool(
+        db.session.scalar(select(exists().where(Invoice.apartment_id == apartment.id)))
+    )
+    has_votes = bool(
+        db.session.scalar(select(exists().where(Vote.apartment_id == apartment.id)))
+    )
     if has_invoices or has_votes:
         flash("Menzili silmek olmur: bagli hesab ve ya sesler var.", "warning")
         return redirect(url_for("admin_apartments"))
