@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h3 class="mb-3">Ayarlar</h3>
-
+<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard') }}">Geri</a>
 {% if session.get('role') == 'superadmin' %}
 <!-- Danger zone -->
 <div class="card border-danger border-2 shadow-sm mb-4">
