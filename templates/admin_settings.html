@@ -2,6 +2,24 @@
 {% block content %}
 <h3 class="mb-3">Ayarlar</h3>
 
+{% if session.get('role') == 'superadmin' %}
+<!-- Danger zone -->
+<div class="card border-danger border-2 shadow-sm mb-4">
+    <div class="card-body">
+        <h5 class="text-danger mb-1">Təhlükəli zona</h5>
+        <p class="text-muted small mb-3">Bu bölmədəki əməliyyatlar geri qaytarıla bilməz. Diqqətli olun.</p>
+        <div class="d-flex align-items-start gap-3 flex-wrap">
+            <div>
+                <div class="fw-semibold">Maliyyə sıfırlaması</div>
+                <div class="small text-muted">Bütün ödənişlər, hesablar (o cümlədən gələcək aylar), xərclər, borclar, balanslar və tarixçə silinər. Mənzillər qalır.</div>
+            </div>
+            <button class="btn btn-danger ms-auto flex-shrink-0" data-bs-toggle="modal" data-bs-target="#resetFinancialModal">
+                Sıfırla
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Confirm modal -->
 <div class="modal fade" id="resetFinancialModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -146,23 +164,6 @@
                 {% endfor %}
                 </tbody>
             </table>
-        </div>
-    </div>
-</div>
-{% if session.get('role') == 'superadmin' %}
-<!-- Danger zone -->
-<div class="card border-danger border-2 shadow-sm mb-4">
-    <div class="card-body">
-        <h5 class="text-danger mb-1">Təhlükəli zona</h5>
-        <p class="text-muted small mb-3">Bu bölmədəki əməliyyatlar geri qaytarıla bilməz. Diqqətli olun.</p>
-        <div class="d-flex align-items-start gap-3 flex-wrap">
-            <div>
-                <div class="fw-semibold">Maliyyə sıfırlaması</div>
-                <div class="small text-muted">Bütün ödənişlər, hesablar (o cümlədən gələcək aylar), xərclər, borclar, balanslar və tarixçə silinər. Mənzillər qalır.</div>
-            </div>
-            <button class="btn btn-danger ms-auto flex-shrink-0" data-bs-toggle="modal" data-bs-target="#resetFinancialModal">
-                Sıfırla
-            </button>
         </div>
     </div>
 </div>
