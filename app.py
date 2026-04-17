@@ -1687,7 +1687,8 @@ def admin_expenses():
             name = request.form.get("name", "").strip()
             category = _parse_expense_category(request.form.get("category"))
             default_amount = float(request.form.get("default_amount", "0") or 0)
-            is_recurring = request.form.get("is_recurring") == "on"
+            # Aylıq şablon UI-də yalnız “Aylıq” seçimi ilə əlavə olunur — həmişə təkrarlanan.
+            is_recurring = True
             if not name:
                 flash("Ad bos ola bilmez.", "danger")
                 return redirect(url_for("admin_expenses"))
@@ -1720,7 +1721,7 @@ def admin_expenses():
             name = (request.form.get("name", "") or "").strip()
             category = _parse_expense_category(request.form.get("category"))
             default_amount = float(request.form.get("default_amount", "0") or 0)
-            is_recurring = request.form.get("is_recurring") == "on"
+            is_recurring = True
             if not name:
                 flash("Ad bos ola bilmez.", "danger")
                 return redirect(url_for("admin_expenses"))

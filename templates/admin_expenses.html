@@ -21,53 +21,37 @@
                     <a class="btn btn-outline-primary btn-sm" target="_blank" href="{{ url_for('print_expenses', period=period) }}">Çap</a>
                 </div>
 
-                <div class="border rounded p-3 mb-3">
-                    <h6 class="mb-3">Xərc əlavə et</h6>
-                    <form method="post" class="row g-2 align-items-end" id="expense-add-form">
+                <div class="border rounded px-3 py-2 mb-3">
+                    <form method="post" class="d-flex flex-nowrap align-items-center gap-2 overflow-x-auto" id="expense-add-form" style="min-height: 2.5rem;">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="form_type" value="add_template" id="expense-add-form-type">
-                        <div class="col-12 mb-1">
-                            <div class="btn-group" role="group" aria-label="Xərc növü">
-                                <input type="radio" class="btn-check" name="entry_kind" id="entry-kind-template" value="template" checked autocomplete="off">
-                                <label class="btn btn-outline-primary" for="entry-kind-template">Aylıq (şablon)</label>
-                                <input type="radio" class="btn-check" name="entry_kind" id="entry-kind-expense" value="expense" autocomplete="off">
-                                <label class="btn btn-outline-primary" for="entry-kind-expense">Birdəfəlik</label>
-                            </div>
+                        <div class="btn-group btn-group-sm flex-shrink-0" role="group" aria-label="Xərc növü">
+                            <input type="radio" class="btn-check" name="entry_kind" id="entry-kind-template" value="template" checked autocomplete="off">
+                            <label class="btn btn-outline-primary" for="entry-kind-template">Aylıq</label>
+                            <input type="radio" class="btn-check" name="entry_kind" id="entry-kind-expense" value="expense" autocomplete="off">
+                            <label class="btn btn-outline-primary" for="entry-kind-expense">Birdəfəlik</label>
                         </div>
-                        <div class="col-md-6 col-lg-2 d-none" id="expense-period-wrap">
-                            <label class="form-label">Period</label>
-                            <input class="form-control js-monthpicker" id="expense-period-input" name="period" value="{{ period }}" placeholder="YYYY-MM">
+                        <div class="d-none flex-shrink-0" id="expense-period-wrap" style="width: 7.5rem;">
+                            <input class="form-control form-control-sm js-monthpicker" id="expense-period-input" name="period" value="{{ period }}" placeholder="YYYY-MM" title="Period" aria-label="Period">
                         </div>
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label">Kateqoriya</label>
-                            <select class="form-select" name="category" required>
-                                <option value="" disabled selected>— seçin —</option>
+                        <div class="flex-shrink-0" style="min-width: 9rem;">
+                            <select class="form-select form-select-sm" name="category" required aria-label="Kateqoriya">
+                                <option value="" disabled selected>Kateqoriya</option>
                                 {% for c in expense_categories %}
                                 <option value="{{ c }}">{{ c }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label">Ad</label>
-                            <input class="form-control" name="name" placeholder="Məs: Maaş, təmir, zibil" required>
+                        <div class="flex-grow-1" style="min-width: 8rem;">
+                            <input class="form-control form-control-sm" name="name" placeholder="Ad (məs: təmir)" required aria-label="Ad">
                         </div>
-                        <div class="col-md-6 col-lg-2" id="template-amount-wrap">
-                            <label class="form-label">Aylıq məbləğ</label>
-                            <input class="form-control" type="number" step="0.01" min="0" max="9999" name="default_amount" id="expense-default-amount" placeholder="0.00">
+                        <div class="flex-shrink-0" style="width: 6.5rem;" id="template-amount-wrap">
+                            <input class="form-control form-control-sm" type="number" step="0.01" min="0" max="9999" name="default_amount" id="expense-default-amount" placeholder="0.00" title="Aylıq məbləğ" aria-label="Aylıq məbləğ">
                         </div>
-                        <div class="col-md-6 col-lg-2 d-flex align-items-end pb-1" id="template-recurring-wrap">
-                            <div class="form-check mb-0">
-                                <input class="form-check-input" type="checkbox" name="is_recurring" id="expense-is-recurring" checked>
-                                <label class="form-check-label" for="expense-is-recurring">Hər ay</label>
-                            </div>
+                        <div class="d-none flex-shrink-0" style="width: 6.5rem;" id="expense-amount-wrap">
+                            <input class="form-control form-control-sm" type="number" step="0.01" min="0.01" max="9999" name="amount" id="expense-amount-input" placeholder="0.00" title="Məbləğ" aria-label="Məbləğ">
                         </div>
-                        <div class="col-md-6 col-lg-2 d-none" id="expense-amount-wrap">
-                            <label class="form-label">Məbləğ</label>
-                            <input class="form-control" type="number" step="0.01" min="0.01" max="9999" name="amount" id="expense-amount-input" placeholder="0.00">
-                        </div>
-                        <div class="col-12 col-lg-auto">
-                            <button type="submit" class="btn btn-primary" id="expense-add-submit">Əlavə et</button>
-                        </div>
+                        <button type="submit" class="btn btn-sm btn-primary flex-shrink-0" id="expense-add-submit">Əlavə et</button>
                     </form>
                 </div>
 
@@ -80,7 +64,6 @@
                                 <th>Kateqoriya</th>
                                 <th>Ad</th>
                                 <th>Məbləğ</th>
-                                <th>Hər ay</th>
                                 <th>Şablon</th>
                                 <th>Ödəniş ({{ period }})</th>
                                 <th class="text-end"></th>
@@ -95,7 +78,6 @@
                                 <td class="text-muted small">{{ t.category or '—' }}</td>
                                 <td>{{ t.name }}</td>
                                 <td>{% if ex %}{{ ex.amount|azn }}{% else %}{{ (t.default_amount or 0)|azn }}{% endif %}</td>
-                                <td>{{ 'Bəli' if t.is_recurring else 'Xeyr' }}</td>
                                 <td>
                                     <span class="badge bg-{{ 'success' if t.is_active else 'secondary' }}">{{ 'Aktiv' if t.is_active else 'Passiv' }}</span>
                                 </td>
@@ -135,7 +117,7 @@
                                 </td>
                             </tr>
                             <tr class="collapse" id="edit-template-{{ t.id }}">
-                                <td colspan="9" class="bg-light">
+                                <td colspan="8" class="bg-light">
                                     <form method="post" class="row g-2 align-items-end">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="form_type" value="update_template">
@@ -157,13 +139,8 @@
                                             <label class="form-label">Aylıq məbləğ</label>
                                             <input class="form-control" type="number" step="0.01" min="0" max="9999" name="default_amount" value="{{ t.default_amount }}">
                                         </div>
-                                        <div class="col-md-2 d-flex align-items-end">
-                                            <div class="form-check mb-0">
-                                                <input class="form-check-input" type="checkbox" name="is_recurring" {% if t.is_recurring %}checked{% endif %}>
-                                                <label class="form-check-label">Hər ay</label>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-2">
+                                        <div class="col-md-4">
+                                            <label class="form-label d-none d-md-block">&nbsp;</label>
                                             <button class="btn btn-primary w-100">Yadda saxla</button>
                                         </div>
                                     </form>
@@ -177,7 +154,6 @@
                                 <td class="text-muted small">{{ e.category or '—' }}</td>
                                 <td>{{ e.name }}</td>
                                 <td class="text-danger fw-semibold">{{ e.amount|azn }}</td>
-                                <td class="text-muted small">—</td>
                                 <td class="text-muted small">—</td>
                                 <td>
                                     {% if e.is_paid %}
@@ -201,7 +177,7 @@
                                 </td>
                             </tr>
                             <tr class="collapse" id="edit-expense-{{ e.id }}">
-                                <td colspan="9" class="bg-light">
+                                <td colspan="8" class="bg-light">
                                     <form method="post" action="{{ url_for('update_expense', expense_id=e.id) }}" class="row g-2 align-items-end">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <div class="col-md-2">
@@ -233,7 +209,7 @@
                             </tr>
                         {% endfor %}
                         {% if not templates and not one_off_expenses %}
-                            <tr><td colspan="9" class="text-muted">Hələ şablon və ya bu aya aid birdəfəlik xərc yoxdur.</td></tr>
+                            <tr><td colspan="8" class="text-muted">Hələ şablon və ya bu aya aid birdəfəlik xərc yoxdur.</td></tr>
                         {% endif %}
                         </tbody>
                     </table>
@@ -252,12 +228,10 @@
     const formType = document.getElementById("expense-add-form-type");
     const wrapPeriod = document.getElementById("expense-period-wrap");
     const wrapTplAmt = document.getElementById("template-amount-wrap");
-    const wrapTplRec = document.getElementById("template-recurring-wrap");
     const wrapExpAmt = document.getElementById("expense-amount-wrap");
     const periodInput = document.getElementById("expense-period-input");
     const defaultAmountInput = document.getElementById("expense-default-amount");
     const amountInput = document.getElementById("expense-amount-input");
-    const isRecurringInput = document.getElementById("expense-is-recurring");
     const submitBtn = document.getElementById("expense-add-submit");
 
     function sync() {
@@ -265,21 +239,19 @@
         if (formType) formType.value = isTpl ? "add_template" : "add_expense";
         wrapPeriod.classList.toggle("d-none", isTpl);
         wrapTplAmt.classList.toggle("d-none", !isTpl);
-        wrapTplRec.classList.toggle("d-none", !isTpl);
         wrapExpAmt.classList.toggle("d-none", isTpl);
         if (periodInput) {
             periodInput.required = !isTpl;
             periodInput.disabled = isTpl;
         }
         if (defaultAmountInput) defaultAmountInput.disabled = !isTpl;
-        if (isRecurringInput) isRecurringInput.disabled = !isTpl;
         if (amountInput) {
             amountInput.required = !isTpl;
             amountInput.disabled = isTpl;
         }
         if (submitBtn) {
             submitBtn.textContent = isTpl ? "Əlavə et" : "Daxil et";
-            submitBtn.className = isTpl ? "btn btn-primary" : "btn btn-success";
+            submitBtn.className = isTpl ? "btn btn-sm btn-primary flex-shrink-0" : "btn btn-sm btn-success flex-shrink-0";
         }
     }
     form.querySelectorAll('input[name="entry_kind"]').forEach((el) => el.addEventListener("change", sync));
