@@ -737,6 +737,16 @@ def normalize_az_phone(phone_raw: str):
     return phone if re.fullmatch(r"\+994\d{9}", phone) else None
 
 
+def _parse_int_field(raw_value, *, min_value: int, max_value: int):
+    raw = (raw_value or "").strip()
+    if not raw:
+        return None
+    value = int(raw)
+    if value < min_value or value > max_value:
+        raise ValueError
+    return value
+
+
 def parse_login_identifier(raw: str):
     """Classify login input: email (contains @) or Azerbaijani phone (+994…)."""
     s = (raw or "").strip()
@@ -1110,18 +1120,36 @@ def select_apartment():
 def admin_apartments():
     if request.method == "POST":
         number = request.form["number"].strip()
-        floor = int(request.form["floor"])
+        if not number or len(number) > 4:
+            flash("Nömrə 1-4 simvol olmalıdır.", "danger")
+            return redirect(url_for("admin_apartments"))
+        try:
+            floor = _parse_int_field(request.form.get("floor"), min_value=1, max_value=999)
+        except ValueError:
+            flash("Mərtəbə 1-999 aralığında olmalıdır.", "danger")
+            return redirect(url_for("admin_apartments"))
         preset_id_raw = (request.form.get("preset_id", "") or "").strip()
         preset = ApartmentPreset.query.get(int(preset_id_raw)) if preset_id_raw.isdigit() else None
         rooms_raw = (request.form.get("rooms", "") or "").strip()
-        rooms = int(rooms_raw) if rooms_raw else None
+        try:
+            rooms = _parse_int_field(rooms_raw, min_value=1, max_value=999) if rooms_raw else None
+        except ValueError:
+            flash("Otaq sayı 1-999 aralığında olmalıdır.", "danger")
+            return redirect(url_for("admin_apartments"))
         area_raw = (request.form.get("area", "") or "").strip()
-        area = float(area_raw) if area_raw else None
+        try:
+            area = _parse_int_field(area_raw, min_value=1, max_value=9999) if area_raw else None
+        except ValueError:
+            flash("Sahə 1-9999 aralığında tam ədəd olmalıdır.", "danger")
+            return redirect(url_for("admin_apartments"))
         if preset:
             rooms = int(preset.rooms)
-            area = float(preset.area)
+            area = int(preset.area)
         if area is None:
             flash("Sahə daxil edilməlidir.", "danger")
+            return redirect(url_for("admin_apartments"))
+        if floor is None:
+            flash("Mərtəbə daxil edilməlidir.", "danger")
             return redirect(url_for("admin_apartments"))
         owner_user_id = int(request.form["owner_user_id"])
         db.session.add(Apartment(number=number, floor=floor, rooms=rooms, area=area, owner_user_id=owner_user_id))
@@ -1208,10 +1236,28 @@ def delete_apartment(apartment_id):
 def update_apartment(apartment_id):
     apartment = Apartment.query.get_or_404(apartment_id)
     number = request.form["number"].strip()
-    floor = int(request.form["floor"])
+    if not number or len(number) > 4:
+        flash("Nömrə 1-4 simvol olmalıdır.", "danger")
+        return redirect(url_for("admin_apartments"))
+    try:
+        floor = _parse_int_field(request.form.get("floor"), min_value=1, max_value=999)
+    except ValueError:
+        flash("Mərtəbə 1-999 aralığında olmalıdır.", "danger")
+        return redirect(url_for("admin_apartments"))
     rooms_raw = (request.form.get("rooms", "") or "").strip()
-    rooms = int(rooms_raw) if rooms_raw else None
-    area = float(request.form["area"])
+    try:
+        rooms = _parse_int_field(rooms_raw, min_value=1, max_value=999) if rooms_raw else None
+    except ValueError:
+        flash("Otaq sayı 1-999 aralığında olmalıdır.", "danger")
+        return redirect(url_for("admin_apartments"))
+    try:
+        area = _parse_int_field(request.form.get("area"), min_value=1, max_value=9999)
+    except ValueError:
+        flash("Sahə 1-9999 aralığında tam ədəd olmalıdır.", "danger")
+        return redirect(url_for("admin_apartments"))
+    if area is None:
+        flash("Sahə daxil edilməlidir.", "danger")
+        return redirect(url_for("admin_apartments"))
     owner_user_id = int(request.form["owner_user_id"])
 
     duplicate = Apartment.query.filter(Apartment.number == number, Apartment.id != apartment.id).first()
@@ -2357,27 +2403,37 @@ def admin_settings():
             if not name or not rooms_raw or not area_raw:
                 flash("Preset üçün ad, otaq və sahə vacibdir.", "danger")
                 return redirect(url_for("admin_settings"))
-            rooms = int(rooms_raw)
-            area = float(area_raw)
-            if rooms <= 0 or area <= 0:
+            try:
+                rooms = _parse_int_field(rooms_raw, min_value=1, max_value=999)
+                area = _parse_int_field(area_raw, min_value=1, max_value=9999)
+            except ValueError:
+                flash("Preset üçün otaq 1-999, sahə isə 1-9999 aralığında tam ədəd olmalıdır.", "danger")
+                return redirect(url_for("admin_settings"))
+            if rooms is None or area is None:
                 flash("Otaq və sahə sıfırdan böyük olmalıdır.", "danger")
                 return redirect(url_for("admin_settings"))
-            db.session.add(ApartmentPreset(name=name, rooms=rooms, area=round(area, 2)))
+            db.session.add(ApartmentPreset(name=name, rooms=rooms, area=area))
             db.session.commit()
-            audit(f"Mənzil preset əlavə edildi: {name} ({rooms} otaq, {area:.2f} m2)")
+            audit(f"Mənzil preset əlavə edildi: {name} ({rooms} otaq, {area} m2)")
             flash("Mənzil preset əlavə edildi.", "success")
         elif form_type == "update_apartment_preset":
             preset_id = int(request.form["preset_id"])
             preset = ApartmentPreset.query.get_or_404(preset_id)
             name = (request.form.get("name", "") or "").strip()
-            rooms = int(request.form.get("rooms", "0") or 0)
-            area = float(request.form.get("area", "0") or 0)
-            if not name or rooms <= 0 or area <= 0:
+            rooms_raw = (request.form.get("rooms", "") or "").strip()
+            area_raw = (request.form.get("area", "") or "").strip()
+            try:
+                rooms = _parse_int_field(rooms_raw, min_value=1, max_value=999)
+                area = _parse_int_field(area_raw, min_value=1, max_value=9999)
+            except ValueError:
+                flash("Preset məlumatları düzgün deyil: otaq 1-999, sahə 1-9999 olmalıdır.", "danger")
+                return redirect(url_for("admin_settings"))
+            if not name or rooms is None or area is None:
                 flash("Preset məlumatları düzgün deyil.", "danger")
                 return redirect(url_for("admin_settings"))
             preset.name = name
             preset.rooms = rooms
-            preset.area = round(area, 2)
+            preset.area = area
             db.session.commit()
             audit(f"Mənzil preset yeniləndi #{preset_id}")
             flash("Mənzil preset yeniləndi.", "success")

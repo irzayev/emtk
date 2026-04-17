@@ -29,7 +29,7 @@
         <div class="card metric-card border-0 shadow-sm">
             <div class="card-body">
                 <div class="text-muted small">Sahə</div>
-                <div class="h5 mb-0">{{ apartment.area if apartment else 0 }} м2</div>
+                <div class="h5 mb-0">{{ apartment.area|int if apartment else 0 }} м2</div>
             </div>
         </div>
     </div>

@@ -46,7 +46,7 @@
             <div class="col-md-6">
                 <div class="text-muted small">Mənzil</div>
                 <div class="fw-semibold">{{ invoice.apartment.number }}</div>
-                <div class="small text-muted">Sahə: {{ invoice.apartment.area }} м2</div>
+                <div class="small text-muted">Sahə: {{ invoice.apartment.area|int }} м2</div>
             </div>
         </div>
 
