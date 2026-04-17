@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="az">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; color: #111827; margin: 20px; }
+        h2 { margin: 0 0 12px 0; font-size: 20px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th, td { border: 1px solid #d1d5db; padding: 6px 8px; text-align: left; vertical-align: top; }
+        th { background: #f3f4f6; }
+        .toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+        .btn {
+            border: 1px solid #9ca3af;
+            background: white;
+            color: #111827;
+            border-radius: 6px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        @media print {
+            .toolbar { display: none; }
+            body { margin: 6mm; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button class="btn" onclick="window.print()">Çap et</button>
+    </div>
+    <h2>{{ title }}</h2>
+    <table>
+        <thead>
+            <tr>
+                {% for h in headers %}
+                <th>{{ h }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                {% for cell in row %}
+                <td>{{ cell }}</td>
+                {% endfor %}
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="{{ headers|length }}">Məlumat yoxdur.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

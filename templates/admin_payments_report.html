@@ -2,11 +2,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Ödənişlər (mənzil/ay)</h3>
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-success btn-sm" href="{{ url_for('export_payments_report', file_type='xlsx', from_period=from_period, to_period=to_period, apartment_id=apartment_id) }}">Excel</a>
-        <a class="btn btn-outline-danger btn-sm" href="{{ url_for('export_payments_report', file_type='pdf', from_period=from_period, to_period=to_period, apartment_id=apartment_id) }}">PDF</a>
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard') }}">Geri</a>
-    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard') }}">Geri</a>
 </div>
 
 <div class="card border-0 shadow-sm mb-3">
@@ -38,6 +34,10 @@
 
 <div class="card border-0 shadow-sm">
     <div class="card-body">
+        <div class="d-flex justify-content-end gap-2 mb-2">
+            <a class="btn btn-outline-success btn-sm" href="{{ url_for('export_payments_report', from_period=from_period, to_period=to_period, apartment_id=apartment_id) }}">Excel</a>
+            <a class="btn btn-outline-primary btn-sm" target="_blank" href="{{ url_for('print_payments_report', from_period=from_period, to_period=to_period, apartment_id=apartment_id) }}">Çap</a>
+        </div>
         <div class="table-responsive">
             <table class="table table-sm align-middle">
                 <thead>

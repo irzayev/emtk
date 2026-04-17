@@ -15,13 +15,6 @@ from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 from openpyxl import Workbook
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import mm
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import exists, inspect as sa_inspect, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -1902,60 +1895,6 @@ def _build_xlsx(title: str, headers: list[str], rows: list[list[str]]) -> BytesI
     return buffer
 
 
-def _register_pdf_font() -> str:
-    candidates = [
-        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/Library/Fonts/Arial Unicode.ttf",
-        "/Library/Fonts/Arial.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    ]
-    for font_path in candidates:
-        if os.path.exists(font_path):
-            try:
-                pdfmetrics.registerFont(TTFont("ExportFont", font_path))
-                return "ExportFont"
-            except Exception:
-                continue
-    return "Helvetica"
-
-
-def _build_pdf(title: str, headers: list[str], rows: list[list[str]]) -> BytesIO:
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=landscape(A4),
-        leftMargin=8 * mm,
-        rightMargin=8 * mm,
-        topMargin=10 * mm,
-        bottomMargin=10 * mm,
-    )
-    font_name = _register_pdf_font()
-    styles = getSampleStyleSheet()
-    title_style = styles["Heading3"]
-    title_style.fontName = font_name
-
-    table_data = [headers] + (rows or [["Məlumat yoxdur"] + [""] * max(0, len(headers) - 1)])
-    table = Table(table_data, repeatRows=1)
-    table.setStyle(
-        TableStyle(
-            [
-                ("FONTNAME", (0, 0), (-1, -1), font_name),
-                ("FONTSIZE", (0, 0), (-1, -1), 8),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
-                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ]
-        )
-    )
-
-    doc.build([Paragraph(title, title_style), Spacer(1, 8), table])
-    buffer.seek(0)
-    return buffer
-
-
 def _get_admin_expenses_view_data(period: str):
     templates = ExpenseTemplate.query.order_by(ExpenseTemplate.is_active.desc(), ExpenseTemplate.name.asc()).all()
     expenses = Expense.query.filter_by(period=period).order_by(Expense.created_at.desc()).all()
@@ -2186,12 +2125,10 @@ def admin_payments_report():
     return render_template("admin_payments_report.html", **_get_admin_payments_report_view_data(from_period, to_period, apartment_id_raw))
 
 
-@app.route("/admin/export/payments-report/<string:file_type>")
+@app.route("/admin/export/payments-report/xlsx")
 @login_required
 @role_required("komendant", "superadmin")
-def export_payments_report(file_type):
-    if file_type not in {"xlsx", "pdf"}:
-        abort(404)
+def export_payments_report():
     today = date.today()
     default_to = today.strftime("%Y-%m")
     default_from = f"{today.year:04d}-{max(1, today.month - 5):02d}"
@@ -2206,18 +2143,15 @@ def export_payments_report(file_type):
         rows.append([r["apartment"], *[_amount_to_text(v) for v in r["amounts"]], _amount_to_text(r["row_total"])])
     rows.append(["Cəmi", *[_amount_to_text(v) for v in data["col_totals"]], _amount_to_text(data["grand_total"])])
     title = f"Ödənişlər (mənzil/ay): {data['from_period']} - {data['to_period']}"
-    filename = _safe_filename(f"payments_report_{data['from_period']}_{data['to_period']}.{file_type}")
-    payload = _build_xlsx(title, headers, rows) if file_type == "xlsx" else _build_pdf(title, headers, rows)
-    mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if file_type == "xlsx" else "application/pdf"
-    return send_file(payload, as_attachment=True, download_name=filename, mimetype=mimetype)
+    filename = _safe_filename(f"payments_report_{data['from_period']}_{data['to_period']}.xlsx")
+    payload = _build_xlsx(title, headers, rows)
+    return send_file(payload, as_attachment=True, download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
-@app.route("/admin/export/expenses/<string:file_type>")
+@app.route("/admin/export/expenses/xlsx")
 @login_required
 @role_required("komendant", "superadmin")
-def export_expenses(file_type):
-    if file_type not in {"xlsx", "pdf"}:
-        abort(404)
+def export_expenses():
     period = (request.args.get("period") or date.today().strftime("%Y-%m")).strip()
     data = _get_admin_expenses_view_data(period)
     headers = ["Tarix", "Tip", "Ad", "Məbləğ", "Status"]
@@ -2233,18 +2167,15 @@ def export_expenses(file_type):
     ]
     rows.append(["", "", "Cəmi", _amount_to_text(data["expenses_total"]), ""])
     title = f"Xərclər: {period}"
-    filename = _safe_filename(f"expenses_{period}.{file_type}")
-    payload = _build_xlsx(title, headers, rows) if file_type == "xlsx" else _build_pdf(title, headers, rows)
-    mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if file_type == "xlsx" else "application/pdf"
-    return send_file(payload, as_attachment=True, download_name=filename, mimetype=mimetype)
+    filename = _safe_filename(f"expenses_{period}.xlsx")
+    payload = _build_xlsx(title, headers, rows)
+    return send_file(payload, as_attachment=True, download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
-@app.route("/admin/export/invoices/<string:file_type>")
+@app.route("/admin/export/invoices/xlsx")
 @login_required
 @role_required("komendant", "superadmin")
-def export_invoices(file_type):
-    if file_type not in {"xlsx", "pdf"}:
-        abort(404)
+def export_invoices():
     selected_period = (request.args.get("period", "") or "").strip()
     data = _get_admin_invoices_view_data(selected_period)
     headers = ["Mənzil", "Period", "Hesablanıb", "Ödənilib", "Balans", "Status"]
@@ -2263,18 +2194,15 @@ def export_invoices(file_type):
             ]
         )
     title = f"Ödənişlər: {data['selected_period'] or 'bütün periodlar'}"
-    filename = _safe_filename(f"invoices_{(data['selected_period'] or 'all')}.{file_type}")
-    payload = _build_xlsx(title, headers, rows) if file_type == "xlsx" else _build_pdf(title, headers, rows)
-    mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if file_type == "xlsx" else "application/pdf"
-    return send_file(payload, as_attachment=True, download_name=filename, mimetype=mimetype)
+    filename = _safe_filename(f"invoices_{(data['selected_period'] or 'all')}.xlsx")
+    payload = _build_xlsx(title, headers, rows)
+    return send_file(payload, as_attachment=True, download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
-@app.route("/admin/export/history/<string:file_type>")
+@app.route("/admin/export/history/xlsx")
 @login_required
 @role_required("komendant", "superadmin")
-def export_history(file_type):
-    if file_type not in {"xlsx", "pdf"}:
-        abort(404)
+def export_history():
     selected_month = (request.args.get("month") or "").strip()
     data = _get_admin_history_view_data(selected_month)
     headers = ["Tarix", "Növ", "Mənzil", "Period", "Status", "Məbləğ", "Qeyd"]
@@ -2296,10 +2224,101 @@ def export_history(file_type):
             ]
         )
     title = f"Tarixçə: {data['selected_month'] or 'bütün aylar'}"
-    filename = _safe_filename(f"history_{(data['selected_month'] or 'all')}.{file_type}")
-    payload = _build_xlsx(title, headers, rows) if file_type == "xlsx" else _build_pdf(title, headers, rows)
-    mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if file_type == "xlsx" else "application/pdf"
-    return send_file(payload, as_attachment=True, download_name=filename, mimetype=mimetype)
+    filename = _safe_filename(f"history_{(data['selected_month'] or 'all')}.xlsx")
+    payload = _build_xlsx(title, headers, rows)
+    return send_file(payload, as_attachment=True, download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+def _render_print_report(title: str, headers: list[str], rows: list[list[str]]):
+    return render_template("admin_report_print.html", title=title, headers=headers, rows=rows)
+
+
+@app.route("/admin/print/payments-report")
+@login_required
+@role_required("komendant", "superadmin")
+def print_payments_report():
+    today = date.today()
+    default_to = today.strftime("%Y-%m")
+    default_from = f"{today.year:04d}-{max(1, today.month - 5):02d}"
+    from_period = (request.args.get("from_period") or default_from).strip()
+    to_period = (request.args.get("to_period") or default_to).strip()
+    apartment_id_raw = (request.args.get("apartment_id") or "").strip()
+    data = _get_admin_payments_report_view_data(from_period, to_period, apartment_id_raw)
+    headers = ["Mənzil"] + data["periods"] + ["Cəmi"]
+    rows = [[r["apartment"], *[_amount_to_text(v) for v in r["amounts"]], _amount_to_text(r["row_total"])] for r in data["rows"]]
+    rows.append(["Cəmi", *[_amount_to_text(v) for v in data["col_totals"]], _amount_to_text(data["grand_total"])])
+    return _render_print_report(f"Ödənişlər (mənzil/ay): {data['from_period']} - {data['to_period']}", headers, rows)
+
+
+@app.route("/admin/print/expenses")
+@login_required
+@role_required("komendant", "superadmin")
+def print_expenses():
+    period = (request.args.get("period") or date.today().strftime("%Y-%m")).strip()
+    data = _get_admin_expenses_view_data(period)
+    headers = ["Tarix", "Tip", "Ad", "Məbləğ", "Status"]
+    rows = [
+        [
+            e.created_at.strftime("%d.%m.%Y %H:%M") if e.created_at else "",
+            "Sabit" if e.template_id else "Birdəfəlik",
+            e.name,
+            _amount_to_text(e.amount),
+            "Ödənilib" if e.is_paid else "Gözləmədə",
+        ]
+        for e in data["expenses"]
+    ]
+    rows.append(["", "", "Cəmi", _amount_to_text(data["expenses_total"]), ""])
+    return _render_print_report(f"Xərclər: {period}", headers, rows)
+
+
+@app.route("/admin/print/invoices")
+@login_required
+@role_required("komendant", "superadmin")
+def print_invoices():
+    selected_period = (request.args.get("period", "") or "").strip()
+    data = _get_admin_invoices_view_data(selected_period)
+    headers = ["Mənzil", "Period", "Hesablanıb", "Ödənilib", "Balans", "Status"]
+    rows = []
+    for i in data["invoices"]:
+        balance = float(i.paid_amount or 0) - float(i.amount or 0)
+        rows.append(
+            [
+                i.apartment.number if i.apartment else "",
+                i.period,
+                _amount_to_text(i.amount),
+                _amount_to_text(i.paid_amount),
+                _amount_to_text(balance),
+                "ödənilib" if float(i.paid_amount or 0) >= float(i.amount or 0) else "ödənilməyib",
+            ]
+        )
+    return _render_print_report(f"Ödənişlər: {data['selected_period'] or 'bütün periodlar'}", headers, rows)
+
+
+@app.route("/admin/print/history")
+@login_required
+@role_required("komendant", "superadmin")
+def print_history():
+    selected_month = (request.args.get("month") or "").strip()
+    data = _get_admin_history_view_data(selected_month)
+    headers = ["Tarix", "Növ", "Mənzil", "Period", "Status", "Məbləğ", "Qeyd"]
+    rows = []
+    for e in data["events"]:
+        event_type = "Ödəniş" if e["type"] == "payment" else ("Mədaxil" if e["type"] == "topup" else "Xərc")
+        status = "-"
+        if e["type"] == "expense":
+            status = "Ödənilib" if e.get("paid") else "Gözləmədə"
+        rows.append(
+            [
+                e["dt"].strftime("%d.%m.%Y %H:%M") if e.get("dt") else "",
+                event_type,
+                e.get("apartment") or "-",
+                e.get("period") or "-",
+                status,
+                _amount_to_text(e.get("amount")),
+                e.get("comment") or "",
+            ]
+        )
+    return _render_print_report(f"Tarixçə: {data['selected_month'] or 'bütün aylar'}", headers, rows)
 
 
 @app.route("/resident/receipt/<int:payment_id>")
