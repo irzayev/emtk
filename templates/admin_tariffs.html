@@ -118,7 +118,7 @@
                                 <div class="col-md-3">
                                     <label class="form-label">Mənzillər</label>
                                     <select class="form-select js-edit-apartment-ids" name="apartment_ids" id="edit_apartment_ids_{{ t.id }}" multiple>
-                                        {% set selected_scope = scope_map.get(t.id, set()) %}
+                                        {% set selected_scope = scope_map.get(t.id) or [] %}
                                         {% for a in apartments %}
                                         <option value="{{ a.id }}" {% if a.id in selected_scope %}selected{% endif %}>{{ a.number }}</option>
                                         {% endfor %}
