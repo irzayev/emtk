@@ -2,7 +2,11 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Tarixçə</h3>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard') }}">Geri</a>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-success btn-sm" href="{{ url_for('export_history', file_type='xlsx', month=selected_month) }}">Excel</a>
+        <a class="btn btn-outline-danger btn-sm" href="{{ url_for('export_history', file_type='pdf', month=selected_month) }}">PDF</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard') }}">Geri</a>
+    </div>
 </div>
 
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">

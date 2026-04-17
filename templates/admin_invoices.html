@@ -2,14 +2,18 @@
 {% block content %}
 <div class="d-flex justify-content-between mb-3">
     <h3>Ödənişlər</h3>
-    <form method="post" action="{{ url_for('generate_invoices') }}" class="d-flex gap-2">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <select class="form-select form-select-sm" name="period_mode">
-            <option value="current" selected>Cari ay</option>
-            <option value="next">Növbəti ay (cari + növbəti)</option>
-        </select>
-        <button class="btn btn-primary btn-sm" type="submit">Yarat</button>
-    </form>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-success btn-sm" href="{{ url_for('export_invoices', file_type='xlsx', period=selected_period) }}">Excel</a>
+        <a class="btn btn-outline-danger btn-sm" href="{{ url_for('export_invoices', file_type='pdf', period=selected_period) }}">PDF</a>
+        <form method="post" action="{{ url_for('generate_invoices') }}" class="d-flex gap-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select class="form-select form-select-sm" name="period_mode">
+                <option value="current" selected>Cari ay</option>
+                <option value="next">Növbəti ay (cari + növbəti)</option>
+            </select>
+            <button class="btn btn-primary btn-sm" type="submit">Yarat</button>
+        </form>
+    </div>
 </div>
 <div class="mb-3">
     <div class="text-center">

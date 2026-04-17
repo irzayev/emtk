@@ -2,17 +2,26 @@ import os
 import re
 import smtplib
 import uuid
+from io import BytesIO
 from decimal import Decimal
 from datetime import date, datetime, timezone
 from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
 
-from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, redirect, render_template, request, send_file, session, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
+from openpyxl import Workbook
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import exists, inspect as sa_inspect, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -1647,18 +1656,7 @@ def admin_expenses():
             return redirect(url_for("admin_expenses"))
 
     period = request.args.get("period") or date.today().strftime("%Y-%m")
-    templates = ExpenseTemplate.query.order_by(ExpenseTemplate.is_active.desc(), ExpenseTemplate.name.asc()).all()
-    expenses = Expense.query.filter_by(period=period).order_by(Expense.created_at.desc()).all()
-    template_expense_by_template_id = {e.template_id: e for e in expenses if e.template_id}
-    total = round(sum(e.amount for e in expenses), 2)
-    return render_template(
-        "admin_expenses.html",
-        templates=templates,
-        expenses=expenses,
-        period=period,
-        expenses_total=total,
-        template_expense_by_template_id=template_expense_by_template_id,
-    )
+    return render_template("admin_expenses.html", **_get_admin_expenses_view_data(period))
 
 
 @app.route("/admin/expenses/update/<int:expense_id>", methods=["POST"])
@@ -1721,51 +1719,7 @@ def toggle_expense_paid(expense_id):
 @role_required("komendant", "superadmin")
 def admin_invoices():
     selected_period = (request.args.get("period", "") or "").strip()
-    period_rows = (
-        db.session.query(Invoice.period)
-        .filter(Invoice.period.isnot(None), Invoice.period != "")
-        .group_by(Invoice.period)
-        .order_by(Invoice.period.desc())
-        .all()
-    )
-    available_periods = [p for (p,) in period_rows]
-    if not selected_period and available_periods:
-        selected_period = available_periods[0]
-    if selected_period and selected_period not in available_periods:
-        selected_period = available_periods[0] if available_periods else ""
-
-    apartment_number_sort = db.cast(Apartment.number, db.Integer)
-    invoices_query = Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
-    if selected_period:
-        invoices_query = invoices_query.filter(Invoice.period == selected_period)
-    invoices = invoices_query.order_by(apartment_number_sort.asc(), Apartment.number.asc()).all()
-
-    dirty = False
-    for inv in invoices:
-        expected = "odenilib" if float(inv.paid_amount or 0) >= float(inv.amount or 0) else "gozlemede"
-        if inv.status != expected:
-            inv.status = expected
-            dirty = True
-    if dirty:
-        db.session.commit()
-
-    prev_period = None
-    next_period = None
-    if selected_period and selected_period in available_periods:
-        idx = available_periods.index(selected_period)
-        if idx > 0:
-            next_period = available_periods[idx - 1]
-        if idx < len(available_periods) - 1:
-            prev_period = available_periods[idx + 1]
-
-    return render_template(
-        "admin_invoices.html",
-        invoices=invoices,
-        selected_period=selected_period,
-        available_periods=available_periods,
-        prev_period=prev_period,
-        next_period=next_period,
-    )
+    return render_template("admin_invoices.html", **_get_admin_invoices_view_data(selected_period))
 
 
 @app.route("/admin/payments/confirm/<int:payment_id>", methods=["POST"])
@@ -1896,8 +1850,174 @@ def add_payment(invoice_id):
 @login_required
 @role_required("komendant", "superadmin")
 def admin_history():
-    # Unified history: payments (confirmed), balance top-ups, expenses.
-    # Paginated by month using ?month=YYYY-MM.
+    selected_month = (request.args.get("month") or "").strip()
+    return render_template("admin_history.html", **_get_admin_history_view_data(selected_month))
+
+
+def _iter_months_inclusive(from_period: str, to_period: str):
+    def parse(p):
+        y, m = p.split("-")
+        return int(y), int(m)
+
+    fy, fm = parse(from_period)
+    ty, tm = parse(to_period)
+    y, m = fy, fm
+    while (y, m) <= (ty, tm):
+        yield f"{y:04d}-{m:02d}"
+        m += 1
+        if m == 13:
+            m = 1
+            y += 1
+
+
+def _safe_filename(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", (name or "").strip())
+
+
+def _amount_to_text(value) -> str:
+    return f"{float(value or 0):.2f} AZN"
+
+
+def _build_xlsx(title: str, headers: list[str], rows: list[list[str]]) -> BytesIO:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Report"
+    ws.append([title])
+    ws.append(headers)
+    for row in rows:
+        ws.append(row)
+
+    for idx in range(1, len(headers) + 1):
+        col = ws.cell(row=2, column=idx).column_letter
+        max_len = max(
+            len(str(ws.cell(row=r, column=idx).value or ""))
+            for r in range(1, ws.max_row + 1)
+        )
+        ws.column_dimensions[col].width = min(max(12, max_len + 2), 40)
+
+    ws.freeze_panes = "A3"
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+def _register_pdf_font() -> str:
+    candidates = [
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/Library/Fonts/Arial Unicode.ttf",
+        "/Library/Fonts/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    for font_path in candidates:
+        if os.path.exists(font_path):
+            try:
+                pdfmetrics.registerFont(TTFont("ExportFont", font_path))
+                return "ExportFont"
+            except Exception:
+                continue
+    return "Helvetica"
+
+
+def _build_pdf(title: str, headers: list[str], rows: list[list[str]]) -> BytesIO:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=8 * mm,
+        rightMargin=8 * mm,
+        topMargin=10 * mm,
+        bottomMargin=10 * mm,
+    )
+    font_name = _register_pdf_font()
+    styles = getSampleStyleSheet()
+    title_style = styles["Heading3"]
+    title_style.fontName = font_name
+
+    table_data = [headers] + (rows or [["Məlumat yoxdur"] + [""] * max(0, len(headers) - 1)])
+    table = Table(table_data, repeatRows=1)
+    table.setStyle(
+        TableStyle(
+            [
+                ("FONTNAME", (0, 0), (-1, -1), font_name),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]
+        )
+    )
+
+    doc.build([Paragraph(title, title_style), Spacer(1, 8), table])
+    buffer.seek(0)
+    return buffer
+
+
+def _get_admin_expenses_view_data(period: str):
+    templates = ExpenseTemplate.query.order_by(ExpenseTemplate.is_active.desc(), ExpenseTemplate.name.asc()).all()
+    expenses = Expense.query.filter_by(period=period).order_by(Expense.created_at.desc()).all()
+    template_expense_by_template_id = {e.template_id: e for e in expenses if e.template_id}
+    total = round(sum(e.amount for e in expenses), 2)
+    return {
+        "templates": templates,
+        "expenses": expenses,
+        "period": period,
+        "expenses_total": total,
+        "template_expense_by_template_id": template_expense_by_template_id,
+    }
+
+
+def _get_admin_invoices_view_data(selected_period: str):
+    period_rows = (
+        db.session.query(Invoice.period)
+        .filter(Invoice.period.isnot(None), Invoice.period != "")
+        .group_by(Invoice.period)
+        .order_by(Invoice.period.desc())
+        .all()
+    )
+    available_periods = [p for (p,) in period_rows]
+    if not selected_period and available_periods:
+        selected_period = available_periods[0]
+    if selected_period and selected_period not in available_periods:
+        selected_period = available_periods[0] if available_periods else ""
+
+    apartment_number_sort = db.cast(Apartment.number, db.Integer)
+    invoices_query = Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
+    if selected_period:
+        invoices_query = invoices_query.filter(Invoice.period == selected_period)
+    invoices = invoices_query.order_by(apartment_number_sort.asc(), Apartment.number.asc()).all()
+
+    dirty = False
+    for inv in invoices:
+        expected = "odenilib" if float(inv.paid_amount or 0) >= float(inv.amount or 0) else "gozlemede"
+        if inv.status != expected:
+            inv.status = expected
+            dirty = True
+    if dirty:
+        db.session.commit()
+
+    prev_period = None
+    next_period = None
+    if selected_period and selected_period in available_periods:
+        idx = available_periods.index(selected_period)
+        if idx > 0:
+            next_period = available_periods[idx - 1]
+        if idx < len(available_periods) - 1:
+            prev_period = available_periods[idx + 1]
+
+    return {
+        "invoices": invoices,
+        "selected_period": selected_period,
+        "available_periods": available_periods,
+        "prev_period": prev_period,
+        "next_period": next_period,
+    }
+
+
+def _get_admin_history_view_data(selected_month: str):
     month_rows = (
         db.session.query(db.func.strftime("%Y-%m", Payment.created_at).label("month"))
         .filter(Payment.status == "confirmed", Payment.created_at.isnot(None))
@@ -1913,7 +2033,6 @@ def admin_history():
     )
     available_months = sorted([m for (m,) in month_rows if m], reverse=True)
 
-    selected_month = (request.args.get("month") or "").strip()
     if not selected_month and available_months:
         selected_month = available_months[0]
     if selected_month and selected_month not in available_months:
@@ -1924,10 +2043,7 @@ def admin_history():
     if selected_month:
         year, month = [int(x) for x in selected_month.split("-")]
         month_start = datetime(year, month, 1)
-        if month == 12:
-            month_end = datetime(year + 1, 1, 1)
-        else:
-            month_end = datetime(year, month + 1, 1)
+        month_end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
 
     limit = 500
     payments_query = (
@@ -1985,6 +2101,7 @@ def admin_history():
 
     events.sort(key=lambda x: x["dt"] or datetime.min, reverse=True)
     events = events[:limit]
+
     prev_month = None
     next_month = None
     if selected_month and selected_month in available_months:
@@ -1994,49 +2111,17 @@ def admin_history():
         if idx < len(available_months) - 1:
             prev_month = available_months[idx + 1]
 
-    return render_template(
-        "admin_history.html",
-        events=events,
-        selected_month=selected_month,
-        available_months=available_months,
-        prev_month=prev_month,
-        next_month=next_month,
-    )
+    return {
+        "events": events,
+        "selected_month": selected_month,
+        "available_months": available_months,
+        "prev_month": prev_month,
+        "next_month": next_month,
+    }
 
 
-def _iter_months_inclusive(from_period: str, to_period: str):
-    def parse(p):
-        y, m = p.split("-")
-        return int(y), int(m)
-
-    fy, fm = parse(from_period)
-    ty, tm = parse(to_period)
-    y, m = fy, fm
-    while (y, m) <= (ty, tm):
-        yield f"{y:04d}-{m:02d}"
-        m += 1
-        if m == 13:
-            m = 1
-            y += 1
-
-
-@app.route("/admin/payments-report")
-@login_required
-@role_required("komendant", "superadmin")
-def admin_payments_report():
-    # Payments per apartment per month (confirmed payments).
-    today = date.today()
-    default_to = today.strftime("%Y-%m")
-    default_from = f"{today.year:04d}-{max(1, today.month - 5):02d}"
-
-    from_period = (request.args.get("from_period") or default_from).strip()
-    to_period = (request.args.get("to_period") or default_to).strip()
-    apartment_id_raw = (request.args.get("apartment_id") or "").strip()
+def _get_admin_payments_report_view_data(from_period: str, to_period: str, apartment_id_raw: str):
     apartment_id = int(apartment_id_raw) if apartment_id_raw.isdigit() else None
-    if len(from_period) != 7 or len(to_period) != 7:
-        flash("Period duzgun deyil (YYYY-MM).", "danger")
-        return redirect(url_for("dashboard"))
-
     periods = list(_iter_months_inclusive(from_period, to_period))
     if len(periods) > 24:
         periods = periods[-24:]
@@ -2069,22 +2154,152 @@ def admin_payments_report():
         row["row_total"] = round(row["row_total"], 2)
         rows.append(row)
 
-    col_totals = []
-    for idx in range(len(periods)):
-        col_totals.append(round(sum(r["amounts"][idx] for r in rows), 2))
+    col_totals = [round(sum(r["amounts"][idx] for r in rows), 2) for idx in range(len(periods))]
     grand_total = round(sum(col_totals), 2)
+    return {
+        "from_period": from_period,
+        "to_period": to_period,
+        "apartment_id": apartment_id,
+        "apartments_all": Apartment.query.order_by(Apartment.number).all(),
+        "periods": periods,
+        "rows": rows,
+        "col_totals": col_totals,
+        "grand_total": grand_total,
+    }
 
-    return render_template(
-        "admin_payments_report.html",
-        from_period=from_period,
-        to_period=to_period,
-        apartment_id=apartment_id,
-        apartments_all=Apartment.query.order_by(Apartment.number).all(),
-        periods=periods,
-        rows=rows,
-        col_totals=col_totals,
-        grand_total=grand_total,
-    )
+
+@app.route("/admin/payments-report")
+@login_required
+@role_required("komendant", "superadmin")
+def admin_payments_report():
+    # Payments per apartment per month (confirmed payments).
+    today = date.today()
+    default_to = today.strftime("%Y-%m")
+    default_from = f"{today.year:04d}-{max(1, today.month - 5):02d}"
+
+    from_period = (request.args.get("from_period") or default_from).strip()
+    to_period = (request.args.get("to_period") or default_to).strip()
+    apartment_id_raw = (request.args.get("apartment_id") or "").strip()
+    if len(from_period) != 7 or len(to_period) != 7:
+        flash("Period duzgun deyil (YYYY-MM).", "danger")
+        return redirect(url_for("dashboard"))
+    return render_template("admin_payments_report.html", **_get_admin_payments_report_view_data(from_period, to_period, apartment_id_raw))
+
+
+@app.route("/admin/export/payments-report/<string:file_type>")
+@login_required
+@role_required("komendant", "superadmin")
+def export_payments_report(file_type):
+    if file_type not in {"xlsx", "pdf"}:
+        abort(404)
+    today = date.today()
+    default_to = today.strftime("%Y-%m")
+    default_from = f"{today.year:04d}-{max(1, today.month - 5):02d}"
+    from_period = (request.args.get("from_period") or default_from).strip()
+    to_period = (request.args.get("to_period") or default_to).strip()
+    apartment_id_raw = (request.args.get("apartment_id") or "").strip()
+    data = _get_admin_payments_report_view_data(from_period, to_period, apartment_id_raw)
+
+    headers = ["Mənzil"] + data["periods"] + ["Cəmi"]
+    rows = []
+    for r in data["rows"]:
+        rows.append([r["apartment"], *[_amount_to_text(v) for v in r["amounts"]], _amount_to_text(r["row_total"])])
+    rows.append(["Cəmi", *[_amount_to_text(v) for v in data["col_totals"]], _amount_to_text(data["grand_total"])])
+    title = f"Ödənişlər (mənzil/ay): {data['from_period']} - {data['to_period']}"
+    filename = _safe_filename(f"payments_report_{data['from_period']}_{data['to_period']}.{file_type}")
+    payload = _build_xlsx(title, headers, rows) if file_type == "xlsx" else _build_pdf(title, headers, rows)
+    mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if file_type == "xlsx" else "application/pdf"
+    return send_file(payload, as_attachment=True, download_name=filename, mimetype=mimetype)
+
+
+@app.route("/admin/export/expenses/<string:file_type>")
+@login_required
+@role_required("komendant", "superadmin")
+def export_expenses(file_type):
+    if file_type not in {"xlsx", "pdf"}:
+        abort(404)
+    period = (request.args.get("period") or date.today().strftime("%Y-%m")).strip()
+    data = _get_admin_expenses_view_data(period)
+    headers = ["Tarix", "Tip", "Ad", "Məbləğ", "Status"]
+    rows = [
+        [
+            e.created_at.strftime("%d.%m.%Y %H:%M") if e.created_at else "",
+            "Sabit" if e.template_id else "Birdəfəlik",
+            e.name,
+            _amount_to_text(e.amount),
+            "Ödənilib" if e.is_paid else "Gözləmədə",
+        ]
+        for e in data["expenses"]
+    ]
+    rows.append(["", "", "Cəmi", _amount_to_text(data["expenses_total"]), ""])
+    title = f"Xərclər: {period}"
+    filename = _safe_filename(f"expenses_{period}.{file_type}")
+    payload = _build_xlsx(title, headers, rows) if file_type == "xlsx" else _build_pdf(title, headers, rows)
+    mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if file_type == "xlsx" else "application/pdf"
+    return send_file(payload, as_attachment=True, download_name=filename, mimetype=mimetype)
+
+
+@app.route("/admin/export/invoices/<string:file_type>")
+@login_required
+@role_required("komendant", "superadmin")
+def export_invoices(file_type):
+    if file_type not in {"xlsx", "pdf"}:
+        abort(404)
+    selected_period = (request.args.get("period", "") or "").strip()
+    data = _get_admin_invoices_view_data(selected_period)
+    headers = ["Mənzil", "Period", "Hesablanıb", "Ödənilib", "Balans", "Status"]
+    rows = []
+    for i in data["invoices"]:
+        balance = float(i.paid_amount or 0) - float(i.amount or 0)
+        status = "ödənilib" if float(i.paid_amount or 0) >= float(i.amount or 0) else "ödənilməyib"
+        rows.append(
+            [
+                i.apartment.number if i.apartment else "",
+                i.period,
+                _amount_to_text(i.amount),
+                _amount_to_text(i.paid_amount),
+                _amount_to_text(balance),
+                status,
+            ]
+        )
+    title = f"Ödənişlər: {data['selected_period'] or 'bütün periodlar'}"
+    filename = _safe_filename(f"invoices_{(data['selected_period'] or 'all')}.{file_type}")
+    payload = _build_xlsx(title, headers, rows) if file_type == "xlsx" else _build_pdf(title, headers, rows)
+    mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if file_type == "xlsx" else "application/pdf"
+    return send_file(payload, as_attachment=True, download_name=filename, mimetype=mimetype)
+
+
+@app.route("/admin/export/history/<string:file_type>")
+@login_required
+@role_required("komendant", "superadmin")
+def export_history(file_type):
+    if file_type not in {"xlsx", "pdf"}:
+        abort(404)
+    selected_month = (request.args.get("month") or "").strip()
+    data = _get_admin_history_view_data(selected_month)
+    headers = ["Tarix", "Növ", "Mənzil", "Period", "Status", "Məbləğ", "Qeyd"]
+    rows = []
+    for e in data["events"]:
+        event_type = "Ödəniş" if e["type"] == "payment" else ("Mədaxil" if e["type"] == "topup" else "Xərc")
+        status = "-"
+        if e["type"] == "expense":
+            status = "Ödənilib" if e.get("paid") else "Gözləmədə"
+        rows.append(
+            [
+                e["dt"].strftime("%d.%m.%Y %H:%M") if e.get("dt") else "",
+                event_type,
+                e.get("apartment") or "-",
+                e.get("period") or "-",
+                status,
+                _amount_to_text(e.get("amount")),
+                e.get("comment") or "",
+            ]
+        )
+    title = f"Tarixçə: {data['selected_month'] or 'bütün aylar'}"
+    filename = _safe_filename(f"history_{(data['selected_month'] or 'all')}.{file_type}")
+    payload = _build_xlsx(title, headers, rows) if file_type == "xlsx" else _build_pdf(title, headers, rows)
+    mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if file_type == "xlsx" else "application/pdf"
+    return send_file(payload, as_attachment=True, download_name=filename, mimetype=mimetype)
 
 
 @app.route("/resident/receipt/<int:payment_id>")
