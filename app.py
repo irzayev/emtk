@@ -185,9 +185,24 @@ class AuditLog(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+# Kateqoriyalar (Xərclər): şablon və xərc sətirlərində istifadə olunur.
+EXPENSE_CATEGORIES = (
+    "əmək haqqı",
+    "əlavə hərc",
+    "komunal",
+    "servis",
+)
+
+
+def _parse_expense_category(raw: str | None) -> str | None:
+    v = (raw or "").strip()
+    return v if v in EXPENSE_CATEGORIES else None
+
+
 class ExpenseTemplate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
+    category = db.Column(db.String(64), nullable=True)
     default_amount = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     is_recurring = db.Column(db.Boolean, nullable=False, default=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
@@ -198,6 +213,7 @@ class Expense(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     period = db.Column(db.String(7), nullable=False)  # YYYY-MM
     name = db.Column(db.String(120), nullable=False)
+    category = db.Column(db.String(64), nullable=True)
     amount = db.Column(db.Numeric(12, 2), nullable=False)
     is_paid = db.Column(db.Boolean, nullable=False, default=False)
     paid_at = db.Column(db.DateTime, nullable=True)
@@ -457,6 +473,7 @@ def ensure_money_numeric_schema():
                     CREATE TABLE expense_template_new (
                         id INTEGER NOT NULL PRIMARY KEY,
                         name VARCHAR(120) NOT NULL,
+                        category VARCHAR(64),
                         default_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
                         is_recurring BOOLEAN NOT NULL,
                         is_active BOOLEAN NOT NULL,
@@ -464,8 +481,8 @@ def ensure_money_numeric_schema():
                     )
                 """,
                 "copy_sql": """
-                    INSERT INTO expense_template_new (id, name, default_amount, is_recurring, is_active, created_at)
-                    SELECT id, name, CAST(default_amount AS NUMERIC), is_recurring, is_active, created_at
+                    INSERT INTO expense_template_new (id, name, category, default_amount, is_recurring, is_active, created_at)
+                    SELECT id, name, category, CAST(default_amount AS NUMERIC), is_recurring, is_active, created_at
                     FROM expense_template
                 """,
             },
@@ -476,6 +493,7 @@ def ensure_money_numeric_schema():
                         id INTEGER NOT NULL PRIMARY KEY,
                         period VARCHAR(7) NOT NULL,
                         name VARCHAR(120) NOT NULL,
+                        category VARCHAR(64),
                         amount NUMERIC(12,2) NOT NULL,
                         is_paid BOOLEAN NOT NULL DEFAULT 0,
                         paid_at DATETIME,
@@ -487,8 +505,8 @@ def ensure_money_numeric_schema():
                     )
                 """,
                 "copy_sql": """
-                    INSERT INTO expense_new (id, period, name, amount, is_paid, paid_at, template_id, created_by_user_id, created_at)
-                    SELECT id, period, name, CAST(amount AS NUMERIC), is_paid, paid_at, template_id, created_by_user_id, created_at
+                    INSERT INTO expense_new (id, period, name, category, amount, is_paid, paid_at, template_id, created_by_user_id, created_at)
+                    SELECT id, period, name, category, CAST(amount AS NUMERIC), is_paid, paid_at, template_id, created_by_user_id, created_at
                     FROM expense
                 """,
             },
@@ -557,6 +575,7 @@ def ensure_user_role_migration():
 
 
 _did_role_migration = False
+_did_expense_schema = False
 _did_money_migration = False
 _did_default_superadmin_seed = False
 _did_apartment_schema_migration = False
@@ -582,10 +601,17 @@ def ensure_default_superadmin_seed():
 @app.before_request
 def _run_role_migration_once():
     global _did_role_migration
+    global _did_expense_schema
     global _did_money_migration
     global _did_default_superadmin_seed
     global _did_apartment_schema_migration
     global _did_tariff_scope_schema
+    # Expense sütunları əvvəl (NUMERIC rebuild üçün category mövcud olsun).
+    if not _did_expense_schema:
+        try:
+            ensure_expense_schema()
+        finally:
+            _did_expense_schema = True
     if not _did_money_migration:
         try:
             ensure_money_numeric_schema()
@@ -632,6 +658,13 @@ def ensure_expense_schema():
 
         # New rows should default to unpaid; keep legacy rows paid.
         conn.exec_driver_sql("UPDATE expense SET is_paid=0 WHERE is_paid IS NULL")
+
+        et_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(expense_template)")}
+        if "category" not in et_columns:
+            conn.exec_driver_sql("ALTER TABLE expense_template ADD COLUMN category VARCHAR(64)")
+        if "category" not in columns:
+            conn.exec_driver_sql("ALTER TABLE expense ADD COLUMN category VARCHAR(64)")
+
 
 def ensure_balance_schema():
     with db.engine.connect() as conn:
@@ -1486,6 +1519,7 @@ def generate_invoices():
                 Expense(
                     period=period,
                     name=t.name,
+                    category=t.category,
                     amount=round(amount, 2),
                     is_paid=False,
                     paid_at=None,
@@ -1580,14 +1614,19 @@ def admin_expenses():
         form_type = request.form.get("form_type", "")
         if form_type == "add_template":
             name = request.form.get("name", "").strip()
+            category = _parse_expense_category(request.form.get("category"))
             default_amount = float(request.form.get("default_amount", "0") or 0)
             is_recurring = request.form.get("is_recurring") == "on"
             if not name:
                 flash("Ad bos ola bilmez.", "danger")
                 return redirect(url_for("admin_expenses"))
+            if not category:
+                flash("Kateqoriya seçin.", "danger")
+                return redirect(url_for("admin_expenses"))
             db.session.add(
                 ExpenseTemplate(
                     name=name,
+                    category=category,
                     default_amount=round(default_amount, 2),
                     is_recurring=is_recurring,
                     is_active=True,
@@ -1608,15 +1647,20 @@ def admin_expenses():
             template_id = int(request.form["template_id"])
             t = ExpenseTemplate.query.get_or_404(template_id)
             name = (request.form.get("name", "") or "").strip()
+            category = _parse_expense_category(request.form.get("category"))
             default_amount = float(request.form.get("default_amount", "0") or 0)
             is_recurring = request.form.get("is_recurring") == "on"
             if not name:
                 flash("Ad bos ola bilmez.", "danger")
                 return redirect(url_for("admin_expenses"))
+            if not category:
+                flash("Kateqoriya seçin.", "danger")
+                return redirect(url_for("admin_expenses"))
             if default_amount < 0:
                 flash("Məbləğ mənfi ola bilməz.", "danger")
                 return redirect(url_for("admin_expenses"))
             t.name = name
+            t.category = category
             t.default_amount = round(default_amount, 2)
             t.is_recurring = is_recurring
             db.session.commit()
@@ -1635,6 +1679,7 @@ def admin_expenses():
         if form_type == "add_expense":
             period = (request.form.get("period", "") or "").strip()
             name = (request.form.get("name", "") or "").strip()
+            category = _parse_expense_category(request.form.get("category"))
             amount = float(request.form.get("amount", "0") or 0)
             if not period or len(period) != 7:
                 flash("Period duzgun deyil (YYYY-MM).", "danger")
@@ -1642,10 +1687,23 @@ def admin_expenses():
             if not name:
                 flash("Ad bos ola bilmez.", "danger")
                 return redirect(url_for("admin_expenses"))
+            if not category:
+                flash("Kateqoriya seçin.", "danger")
+                return redirect(url_for("admin_expenses"))
             if amount <= 0:
                 flash("Məbləğ sıfırdan böyük olmalıdır.", "danger")
                 return redirect(url_for("admin_expenses"))
-            db.session.add(Expense(period=period, name=name, amount=round(amount, 2), is_paid=False, paid_at=None, created_by_user_id=current_user().id))
+            db.session.add(
+                Expense(
+                    period=period,
+                    name=name,
+                    category=category,
+                    amount=round(amount, 2),
+                    is_paid=False,
+                    paid_at=None,
+                    created_by_user_id=current_user().id,
+                )
+            )
             db.session.commit()
             audit(f"Xərc daxil edildi: {name} {amount:.2f} AZN period {period}")
             flash("Xərc daxil edildi.", "success")
@@ -1662,12 +1720,16 @@ def update_expense(expense_id):
     e = Expense.query.get_or_404(expense_id)
     period = (request.form.get("period", "") or "").strip()
     name = (request.form.get("name", "") or "").strip()
+    category = _parse_expense_category(request.form.get("category"))
     amount = float(request.form.get("amount", "0") or 0)
     if not period or len(period) != 7:
         flash("Period duzgun deyil (YYYY-MM).", "danger")
         return redirect(url_for("admin_expenses", period=e.period))
     if not name:
         flash("Ad bos ola bilmez.", "danger")
+        return redirect(url_for("admin_expenses", period=e.period))
+    if not category:
+        flash("Kateqoriya seçin.", "danger")
         return redirect(url_for("admin_expenses", period=e.period))
     if amount <= 0:
         flash("Məbləğ sıfırdan böyük olmalıdır.", "danger")
@@ -1676,6 +1738,7 @@ def update_expense(expense_id):
     old = f"{e.period} {e.name} {float(e.amount):.2f}"
     e.period = period
     e.name = name
+    e.category = category
     e.amount = round(amount, 2)
     db.session.commit()
     audit(f"Xərc yeniləndi #{e.id}: {old} -> {e.period} {e.name} {float(e.amount):.2f}")
@@ -1911,6 +1974,7 @@ def _get_admin_expenses_view_data(period: str):
         "period": period,
         "expenses_total": total,
         "template_expense_by_template_id": template_expense_by_template_id,
+        "expense_categories": EXPENSE_CATEGORIES,
     }
 
 
@@ -2159,18 +2223,19 @@ def export_payments_report():
 def export_expenses():
     period = (request.args.get("period") or date.today().strftime("%Y-%m")).strip()
     data = _get_admin_expenses_view_data(period)
-    headers = ["Tarix", "Tip", "Ad", "Məbləğ", "Status"]
+    headers = ["Tarix", "Tip", "Kateqoriya", "Ad", "Məbləğ", "Status"]
     rows = [
         [
             e.created_at.strftime("%d.%m.%Y %H:%M") if e.created_at else "",
             "Sabit" if e.template_id else "Birdəfəlik",
+            e.category or "",
             e.name,
             _amount_to_text(e.amount),
             "Ödənilib" if e.is_paid else "Gözləmədə",
         ]
         for e in data["expenses"]
     ]
-    rows.append(["", "", "Cəmi", _amount_to_text(data["expenses_total"]), ""])
+    rows.append(["", "", "", "Cəmi", _amount_to_text(data["expenses_total"]), "", ""])
     title = f"Xərclər: {period}"
     filename = _safe_filename(f"expenses_{period}.xlsx")
     payload = _build_xlsx(title, headers, rows)
@@ -2261,18 +2326,19 @@ def print_payments_report():
 def print_expenses():
     period = (request.args.get("period") or date.today().strftime("%Y-%m")).strip()
     data = _get_admin_expenses_view_data(period)
-    headers = ["Tarix", "Tip", "Ad", "Məbləğ", "Status"]
+    headers = ["Tarix", "Tip", "Kateqoriya", "Ad", "Məbləğ", "Status"]
     rows = [
         [
             e.created_at.strftime("%d.%m.%Y %H:%M") if e.created_at else "",
             "Sabit" if e.template_id else "Birdəfəlik",
+            e.category or "",
             e.name,
             _amount_to_text(e.amount),
             "Ödənilib" if e.is_paid else "Gözləmədə",
         ]
         for e in data["expenses"]
     ]
-    rows.append(["", "", "Cəmi", _amount_to_text(data["expenses_total"]), ""])
+    rows.append(["", "", "", "Cəmi", _amount_to_text(data["expenses_total"]), "", ""])
     return _render_print_report(f"Xərclər: {period}", headers, rows)
 
 

@@ -32,6 +32,15 @@
                                     <label class="form-label">Ad</label>
                                     <input class="form-control" name="name" placeholder="Məs: Maaş, Elektrik, Su, Zibil" required>
                                 </div>
+                                <div class="col-12">
+                                    <label class="form-label">Kateqoriya</label>
+                                    <select class="form-select" name="category" required>
+                                        <option value="" disabled selected>— seçin —</option>
+                                        {% for c in expense_categories %}
+                                        <option value="{{ c }}">{{ c }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
                                 <div class="col-6">
                                     <label class="form-label">Aylıq məbləğ</label>
                                     <input class="form-control" type="number" step="0.01" min="0" max="9999" name="default_amount" placeholder="0.00">
@@ -54,11 +63,20 @@
                             <form method="post" class="row g-2">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="form_type" value="add_expense">
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <label class="form-label">Period</label>
                                     <input class="form-control js-monthpicker" name="period" value="{{ period }}" placeholder="YYYY-MM" required>
                                 </div>
-                                <div class="col-md-5">
+                                <div class="col-md-3">
+                                    <label class="form-label">Kateqoriya</label>
+                                    <select class="form-select" name="category" required>
+                                        <option value="" disabled selected>— seçin —</option>
+                                        {% for c in expense_categories %}
+                                        <option value="{{ c }}">{{ c }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
                                     <label class="form-label">Ad</label>
                                     <input class="form-control" name="name" placeholder="Məs: Zibil hesabı, təmir" required>
                                 </div>
@@ -76,11 +94,12 @@
 
                 <div class="table-responsive mb-3">
                     <table class="table align-middle">
-                        <thead><tr><th>Şablon</th><th>Məbləğ</th><th>Hər ay</th><th>Status</th><th>Ödəniş ({{ period }})</th><th></th></tr></thead>
+                        <thead><tr><th>Şablon</th><th>Kateqoriya</th><th>Məbləğ</th><th>Hər ay</th><th>Status</th><th>Ödəniş ({{ period }})</th><th></th></tr></thead>
                         <tbody>
                         {% for t in templates %}
                             <tr>
                                 <td>{{ t.name }}</td>
+                                <td class="text-muted small">{{ t.category or '—' }}</td>
                                 <td>{{ (t.default_amount or 0)|azn }}</td>
                                 <td>{{ 'Bəli' if t.is_recurring else 'Xeyr' }}</td>
                                 <td>
@@ -124,21 +143,30 @@
                                 </td>
                             </tr>
                             <tr class="collapse" id="edit-template-{{ t.id }}">
-                                <td colspan="6" class="bg-light">
+                                <td colspan="7" class="bg-light">
                                     <form method="post" class="row g-2 align-items-end">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="form_type" value="update_template">
                                         <input type="hidden" name="template_id" value="{{ t.id }}">
-                                        <div class="col-md-5">
+                                        <div class="col-md-3">
                                             <label class="form-label">Ad</label>
                                             <input class="form-control" name="name" value="{{ t.name }}" required>
                                         </div>
                                         <div class="col-md-3">
+                                            <label class="form-label">Kateqoriya</label>
+                                            <select class="form-select" name="category" required>
+                                                {% if not t.category %}<option value="" disabled selected>— seçin —</option>{% endif %}
+                                                {% for c in expense_categories %}
+                                                <option value="{{ c }}" {% if t.category == c %}selected{% endif %}>{{ c }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2">
                                             <label class="form-label">Aylıq məbləğ</label>
                                             <input class="form-control" type="number" step="0.01" min="0" max="9999" name="default_amount" value="{{ t.default_amount }}">
                                         </div>
-                                        <div class="col-md-2">
-                                            <div class="form-check">
+                                        <div class="col-md-2 d-flex align-items-end">
+                                            <div class="form-check mb-0">
                                                 <input class="form-check-input" type="checkbox" name="is_recurring" {% if t.is_recurring %}checked{% endif %}>
                                                 <label class="form-check-label">Hər ay</label>
                                             </div>
@@ -150,7 +178,7 @@
                                 </td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="6" class="text-muted">Şablon yoxdur.</td></tr>
+                            <tr><td colspan="7" class="text-muted">Şablon yoxdur.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
@@ -158,7 +186,7 @@
 
                 <div class="table-responsive">
                     <table class="table">
-                        <thead><tr><th>Tarix</th><th>Tip</th><th>Ad</th><th>Məbləğ</th><th>Status</th><th></th></tr></thead>
+                        <thead><tr><th>Tarix</th><th>Tip</th><th>Kateqoriya</th><th>Ad</th><th>Məbləğ</th><th>Status</th><th></th></tr></thead>
                         <tbody>
                         {% for e in expenses %}
                             <tr>
@@ -170,6 +198,7 @@
                                         <span class="badge bg-secondary-subtle text-secondary">Birdəfəlik</span>
                                     {% endif %}
                                 </td>
+                                <td class="text-muted small">{{ e.category or '—' }}</td>
                                 <td>{{ e.name }}</td>
                                 <td class="text-danger fw-semibold">{{ e.amount|azn }}</td>
                                 <td>
@@ -194,14 +223,23 @@
                                 </td>
                             </tr>
                             <tr class="collapse" id="edit-expense-{{ e.id }}">
-                                <td colspan="6" class="bg-light">
+                                <td colspan="7" class="bg-light">
                                     <form method="post" action="{{ url_for('update_expense', expense_id=e.id) }}" class="row g-2 align-items-end">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <div class="col-md-3">
+                                        <div class="col-md-2">
                                             <label class="form-label">Period</label>
                                             <input class="form-control js-monthpicker" name="period" value="{{ e.period }}" required>
                                         </div>
-                                        <div class="col-md-5">
+                                        <div class="col-md-3">
+                                            <label class="form-label">Kateqoriya</label>
+                                            <select class="form-select" name="category" required>
+                                                {% if not e.category %}<option value="" disabled selected>— seçin —</option>{% endif %}
+                                                {% for c in expense_categories %}
+                                                <option value="{{ c }}" {% if e.category == c %}selected{% endif %}>{{ c }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
                                             <label class="form-label">Ad</label>
                                             <input class="form-control" name="name" value="{{ e.name }}" required>
                                         </div>
@@ -216,7 +254,7 @@
                                 </td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="6" class="text-muted">Xərc yoxdur.</td></tr>
+                            <tr><td colspan="7" class="text-muted">Xərc yoxdur.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
