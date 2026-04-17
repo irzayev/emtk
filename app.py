@@ -1146,18 +1146,14 @@ def balance_topup():
     except (TypeError, ValueError):
         flash("Məbləğ düzgün deyil.", "danger")
         return redirect(url_for("dashboard"))
-    if amount == 0:
-        flash("Məbləğ sıfır ola bilməz.", "danger")
+    if amount <= 0:
+        flash("Məbləğ sıfırdan böyük olmalıdır.", "danger")
         return redirect(url_for("dashboard"))
     comment = (request.form.get("comment", "") or "").strip() or None
     db.session.add(BalanceTopUp(amount=round(amount, 2), comment=comment, created_by_user_id=current_user().id))
     db.session.commit()
-    if amount > 0:
-        audit(f"Balans artirildi {amount:.2f} AZN" + (f" ({comment})" if comment else ""))
-        flash("Balans artirildi.", "success")
-    else:
-        audit(f"Balans azaldıldı {-amount:.2f} AZN" + (f" ({comment})" if comment else ""))
-        flash("Balans azaldıldı.", "success")
+    audit(f"Balans artirildi {amount:.2f} AZN" + (f" ({comment})" if comment else ""))
+    flash("Balans artirildi.", "success")
     return redirect(url_for("dashboard"))
 
 
