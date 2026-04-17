@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="d-flex justify-content-between mb-3">
-    <h3>Hesablar</h3>
+    <h3>Ödənişlər</h3>
     <form method="post" action="{{ url_for('generate_invoices') }}" class="d-flex gap-2">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <select class="form-select form-select-sm" name="period_mode">
@@ -45,7 +45,7 @@
                 <tbody>
                 {% for i in invoices %}
                     {% set balance = (i.paid_amount - i.amount) %}
-                    {% set computed_status = ('ödənilib' if i.paid_amount >= i.amount else 'gözləmədə') %}
+                    {% set computed_status = ('ödənilib' if i.paid_amount >= i.amount else 'ödənilməyib') %}
                     <tr>
                         <td>{{ i.apartment.number }}</td>
                         <td>{{ i.period }}</td>
@@ -71,7 +71,7 @@
                                 <input type="hidden" name="period" value="{{ selected_period }}">
                                 <input type="hidden" name="amount" value="{{ remaining_debt|round(2) }}">
                                 <input type="hidden" name="comment" value="Tam Ödəniş">
-                                <button class="btn btn-sm btn-outline-success w-100">Tam Ödəniş</button>
+                                <button class="btn btn-sm btn-outline-success w-100">Tam ödəniş</button>
                             </form>
                             {% else %}
                             <span class="text-muted small">-</span>
