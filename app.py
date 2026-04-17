@@ -2609,7 +2609,9 @@ def admin_user_update(user_id):
         flash("Rol duzgun deyil.", "danger")
         return redirect(url_for("admin_users"))
     me = current_user()
-    if me and me.role != "superadmin" and (target.role == "superadmin" or role == "superadmin"):
+    if (not me or me.role != "superadmin") and (
+        target.role == "superadmin" or role == "superadmin"
+    ):
         flash("Superadmin hesablarını yalnız superadmin idarə edə bilər.", "danger")
         return redirect(url_for("admin_users"))
     duplicate = User.query.filter(User.email == email, User.id != target.id).first()

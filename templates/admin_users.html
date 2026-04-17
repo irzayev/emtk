@@ -61,13 +61,18 @@
                         <td>{{ u.email }}</td>
                         <td><span class="badge bg-secondary">{{ u.role }}</span></td>
                         <td class="text-end">
+                            {% if session.get('role') == 'superadmin' or u.role != 'superadmin' %}
                             <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-user-{{ u.id }}">Redaktə et</button>
                             <form method="post" action="{{ url_for('admin_user_delete', user_id=u.id) }}" class="d-inline" onsubmit="return confirm('İstifadəçi silinsin?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button class="btn btn-sm btn-outline-danger">Sil</button>
                             </form>
+                            {% else %}
+                            <span class="text-muted small" title="Yalnız superadmin redaktə edə bilər">—</span>
+                            {% endif %}
                         </td>
                     </tr>
+                    {% if session.get('role') == 'superadmin' or u.role != 'superadmin' %}
                     <tr class="collapse" id="edit-user-{{ u.id }}">
                         <td colspan="6" class="bg-light">
                             <form method="post" action="{{ url_for('admin_user_update', user_id=u.id) }}" class="row g-2">
@@ -104,6 +109,7 @@
                             </form>
                         </td>
                     </tr>
+                    {% endif %}
                     {% else %}
                     <tr><td colspan="6" class="text-muted">İstifadəçi yoxdur.</td></tr>
                     {% endfor %}
