@@ -254,20 +254,19 @@ def _move_invoice_overpay_to_credit(invoice: "Invoice") -> float:
     return round(overflow, 2)
 
 
-def _apply_payment_delta(invoice: "Invoice", delta: float) -> dict:
+def _apply_payment_delta(invoice: "Invoice", delta: float, *, debt_adjustment: bool = False) -> dict:
     """
     Apply a payment delta to an invoice/apartment.
-    Positive delta increases paid; negative delta is a correction (decrease).
-    Returns dict with keys: moved_to_credit, removed_from_credit.
+    Positive delta increases paid; negative delta is a correction (decrease) or,
+    when debt_adjustment is True (admin negative Mədaxil), records extra debt
+    by lowering paid_amount (may go negative so balance = paid - amount matches).
 
-    FIX: removed the misleading `applied_to_invoice` field whose formula was
-    incorrect for negative deltas. Callers only use moved_to_credit /
-    removed_from_credit for audit messages, so those two fields are enough.
+    Returns dict with keys: moved_to_credit, removed_from_credit.
     """
     apt = invoice.apartment
     if not apt:
         # No apartment linked — just update paid_amount directly.
-        invoice.paid_amount = max(0.0, round(float(invoice.paid_amount or 0) + float(delta), 2))
+        invoice.paid_amount = round(float(invoice.paid_amount or 0) + float(delta), 2)
         invoice.status = "odenilib" if float(invoice.paid_amount or 0) >= float(invoice.amount or 0) else "gozlemede"
         return {"moved_to_credit": 0.0, "removed_from_credit": 0.0}
 
@@ -280,20 +279,24 @@ def _apply_payment_delta(invoice: "Invoice", delta: float) -> dict:
         invoice.paid_amount = round(float(invoice.paid_amount or 0) + delta, 2)
         moved_to_credit = _move_invoice_overpay_to_credit(invoice)
     else:
-        # Correction / reversal: reduce paid_amount.
-        # Strategy: first try to recover from apartment credit (so the credit
-        # pool shrinks rather than paid_amount going negative), then reduce
-        # paid_amount for whatever remains.
-        need = -delta  # positive amount we need to subtract
-        credit = float(apt.credit_balance or 0)
-        take_credit = min(credit, need)
-        if take_credit > 0:
-            apt.credit_balance = round(credit - take_credit, 2)
-            removed_from_credit = round(take_credit, 2)
-            need -= take_credit
+        if debt_adjustment:
+            # Additional debt / manual adjustment: do not pull from apartment credit first.
+            invoice.paid_amount = round(float(invoice.paid_amount or 0) + delta, 2)
+        else:
+            # Correction / reversal: reduce paid_amount.
+            # Strategy: first try to recover from apartment credit (so the credit
+            # pool shrinks rather than paid_amount going negative), then reduce
+            # paid_amount for whatever remains.
+            need = -delta  # positive amount we need to subtract
+            credit = float(apt.credit_balance or 0)
+            take_credit = min(credit, need)
+            if take_credit > 0:
+                apt.credit_balance = round(credit - take_credit, 2)
+                removed_from_credit = round(take_credit, 2)
+                need -= take_credit
 
-        if need > 0:
-            invoice.paid_amount = max(0.0, round(float(invoice.paid_amount or 0) - need, 2))
+            if need > 0:
+                invoice.paid_amount = max(0.0, round(float(invoice.paid_amount or 0) - need, 2))
 
         invoice.status = "odenilib" if float(invoice.paid_amount or 0) >= float(invoice.amount or 0) else "gozlemede"
 
@@ -1803,7 +1806,9 @@ def add_payment(invoice_id):
 
     # FIX (warning #1): same try/except guard as confirm_payment.
     try:
-        result = _apply_payment_delta(invoice, apply_amount)
+        result = _apply_payment_delta(
+            invoice, apply_amount, debt_adjustment=(apply_amount < 0)
+        )
         payment = Payment(
             invoice_id=invoice.id,
             amount=apply_amount,
@@ -2807,6 +2812,14 @@ def admin_health_calculation_smoke():
     _check("reversal_removed_from_credit", delta_info_reversal["removed_from_credit"], 4.00)
     _check("reversal_credit_after_consume", apt3.credit_balance, 0.00)
     _check("reversal_paid_after_remainder", inv3.paid_amount, 88.00)
+
+    # Scenario 3b: negative Mədaxil (debt adjustment) lowers paid_amount; balance follows.
+    apt3b = Apartment(area=60.0, credit_balance=Decimal("0.00"))
+    inv3b = Invoice(amount=Decimal("100.00"), paid_amount=Decimal("49.00"), status="gozlemede")
+    inv3b.apartment = apt3b
+    _apply_payment_delta(inv3b, -50.00, debt_adjustment=True)
+    _check("debt_adjust_paid_amount", inv3b.paid_amount, -1.00)
+    _check("debt_adjust_invoice_balance", float(inv3b.paid_amount) - float(inv3b.amount), -101.00)
 
     # Scenario 4: resident debt uses max(0, base_debt - credit).
     base_debt = max(0.0, 100.0 - 100.0) + max(0.0, 50.0 - 30.0)
