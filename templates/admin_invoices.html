@@ -41,7 +41,7 @@
     <div class="card-body">
         <div class="table-responsive">
             <table class="table">
-                <thead><tr><th>Mənzil</th><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Balans</th><th>Status</th><th>Tam Ödəniş</th><th>Ödəniş</th><th>Hesab-faktura</th><th>Email</th></tr></thead>
+                <thead><tr><th>Mənzil</th><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Balans</th><th>Status</th><th>Tam ödəniş</th><th>Ödəniş</th><th>Hesab-faktura</th><th>Email</th></tr></thead>
                 <tbody>
                 {% for i in invoices %}
                     {% set balance = (i.paid_amount - i.amount) %}
