@@ -8,6 +8,7 @@ from datetime import date, datetime, timezone
 from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
+from typing import Optional
 
 from flask import Flask, abort, flash, redirect, render_template, request, send_file, session, url_for
 from flask_limiter import Limiter
@@ -194,7 +195,7 @@ EXPENSE_CATEGORIES = (
 )
 
 
-def _parse_expense_category(raw: str | None) -> str | None:
+def _parse_expense_category(raw: Optional[str]) -> Optional[str]:
     v = (raw or "").strip()
     return v if v in EXPENSE_CATEGORIES else None
 
@@ -643,34 +644,42 @@ def _run_role_migration_once():
 
 
 def ensure_expense_schema():
-    # Create new tables for expenses if missing.
-    with db.engine.connect() as conn:
-        tables = {row[0] for row in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'")}
-        if "expense_template" not in tables or "expense" not in tables:
-            db.create_all()
-            return
+    """Create expense tables if missing; add columns for legacy DBs (SQLite + PostgreSQL)."""
+    inspector = sa_inspect(db.engine)
+    if not inspector.has_table("expense_template") or not inspector.has_table("expense"):
+        db.create_all()
+        return
 
-        columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(expense)")}
-        if "is_paid" not in columns:
-            conn.exec_driver_sql("ALTER TABLE expense ADD COLUMN is_paid BOOLEAN NOT NULL DEFAULT 1")
-        if "paid_at" not in columns:
-            conn.exec_driver_sql("ALTER TABLE expense ADD COLUMN paid_at DATETIME")
+    expense_cols = {c["name"] for c in inspector.get_columns("expense")}
+    et_cols = {c["name"] for c in inspector.get_columns("expense_template")}
+    dialect = db.engine.dialect.name
 
-        # New rows should default to unpaid; keep legacy rows paid.
-        conn.exec_driver_sql("UPDATE expense SET is_paid=0 WHERE is_paid IS NULL")
+    with db.engine.begin() as conn:
+        if "is_paid" not in expense_cols:
+            if dialect == "sqlite":
+                conn.exec_driver_sql("ALTER TABLE expense ADD COLUMN is_paid BOOLEAN NOT NULL DEFAULT 1")
+            else:
+                conn.exec_driver_sql("ALTER TABLE expense ADD COLUMN is_paid BOOLEAN NOT NULL DEFAULT TRUE")
+        if "paid_at" not in expense_cols:
+            paid_type = "TIMESTAMP" if dialect == "postgresql" else "DATETIME"
+            conn.exec_driver_sql(f"ALTER TABLE expense ADD COLUMN paid_at {paid_type}")
 
-        et_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(expense_template)")}
-        if "category" not in et_columns:
+        # Legacy cleanup (SQLite uses 0/1; PostgreSQL uses TRUE/FALSE).
+        if dialect == "sqlite":
+            conn.exec_driver_sql("UPDATE expense SET is_paid=0 WHERE is_paid IS NULL")
+        else:
+            conn.exec_driver_sql("UPDATE expense SET is_paid = FALSE WHERE is_paid IS NULL")
+
+        if "category" not in et_cols:
             conn.exec_driver_sql("ALTER TABLE expense_template ADD COLUMN category VARCHAR(64)")
-        if "category" not in columns:
+        if "category" not in expense_cols:
             conn.exec_driver_sql("ALTER TABLE expense ADD COLUMN category VARCHAR(64)")
 
 
 def ensure_balance_schema():
-    with db.engine.connect() as conn:
-        tables = {row[0] for row in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'")}
-        if "balance_top_up" not in tables:
-            db.create_all()
+    inspector = sa_inspect(db.engine)
+    if not inspector.has_table("balance_top_up"):
+        db.create_all()
 
 
 def ensure_tariff_scope_schema():
