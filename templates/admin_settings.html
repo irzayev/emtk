@@ -107,6 +107,60 @@
             <div class="col-md-4"><button class="btn btn-outline-primary w-100">Test gonder</button></div>
         </form>
         <hr>
+        <h5 class="mb-3">Korpuslar</h5>
+        <form method="post" class="row g-2 mb-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="form_type" value="add_building">
+            <div class="col-md-5">
+                <label class="form-label">Ad</label>
+                <input class="form-control" name="building_name" placeholder="Məs: A Korpusu" required>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label">Ünvan (isteğe bağlı)</label>
+                <input class="form-control" name="building_address" placeholder="Məs: 5-ci mərtəbə, sol qanad">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-outline-primary w-100">Əlavə et</button>
+            </div>
+        </form>
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead><tr><th>Ad</th><th>Ünvan</th><th>Mənzil sayı</th><th></th></tr></thead>
+                <tbody>
+                {% for b in buildings %}
+                    <tr>
+                        <td>{{ b.name }}</td>
+                        <td class="text-muted small">{{ b.address or '—' }}</td>
+                        <td>{{ b.apartments|length }}</td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#edit-building-{{ b.id }}">Redaktə</button>
+                            <form method="post" class="d-inline" onsubmit="return confirm('Korpusu silmək istədiyinizə əminsiniz?')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="form_type" value="delete_building">
+                                <input type="hidden" name="building_id" value="{{ b.id }}">
+                                <button class="btn btn-sm btn-outline-danger">Sil</button>
+                            </form>
+                        </td>
+                    </tr>
+                    <tr class="collapse" id="edit-building-{{ b.id }}">
+                        <td colspan="4" class="bg-light">
+                            <form method="post" class="row g-2 align-items-end">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="form_type" value="update_building">
+                                <input type="hidden" name="building_id" value="{{ b.id }}">
+                                <div class="col-md-5"><label class="form-label">Ad</label><input class="form-control" name="building_name" value="{{ b.name }}" required></div>
+                                <div class="col-md-5"><label class="form-label">Ünvan</label><input class="form-control" name="building_address" value="{{ b.address or '' }}"></div>
+                                <div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary w-100">Yadda saxla</button></div>
+                            </form>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="4" class="text-muted">Korpus yoxdur.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <hr>
         <h5 class="mb-3">Mənzil presetləri</h5>
         <form method="post" class="row g-2 mb-3">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

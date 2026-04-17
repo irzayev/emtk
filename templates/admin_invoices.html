@@ -12,16 +12,28 @@
     </form>
 </div>
 <div class="mb-3">
-    <div class="text-center">
-        <div class="small text-muted mb-1">Ödənişlər cədvəli üçün ay seçimi</div>
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-center mb-2">
+        <div class="small text-muted">Ay:</div>
         <form method="get" action="{{ url_for('admin_invoices') }}" class="d-inline-flex align-items-center gap-2">
-            <label class="small text-muted" for="period-select">Ay:</label>
+            <input type="hidden" name="building_id" value="{{ building_id or '' }}">
             <select id="period-select" class="form-select form-select-sm" name="period" onchange="this.form.submit()">
                 {% for p in available_periods %}
                 <option value="{{ p }}" {% if p == selected_period %}selected{% endif %}>{{ p }}</option>
                 {% endfor %}
             </select>
         </form>
+        {% if buildings_all %}
+        <div class="small text-muted ms-3">Korpus:</div>
+        <form method="get" action="{{ url_for('admin_invoices') }}" class="d-inline-flex align-items-center gap-2">
+            <input type="hidden" name="period" value="{{ selected_period }}">
+            <select class="form-select form-select-sm" name="building_id" onchange="this.form.submit()">
+                <option value="">Hamısı</option>
+                {% for b in buildings_all %}
+                <option value="{{ b.id }}" {% if building_id == b.id %}selected{% endif %}>{{ b.name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
     </div>
     <div class="d-flex justify-content-between align-items-center mt-2">
         <div class="small text-muted">
@@ -29,10 +41,10 @@
         </div>
         <div class="d-flex gap-2">
         {% if prev_period %}
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_invoices', period=prev_period) }}">Əvvəlki</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_invoices', period=prev_period, building_id=building_id) }}">Əvvəlki</a>
         {% endif %}
         {% if next_period %}
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_invoices', period=next_period) }}">Növbəti</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_invoices', period=next_period, building_id=building_id) }}">Növbəti</a>
         {% endif %}
         </div>
     </div>
@@ -40,17 +52,18 @@
 <div class="card border-0 shadow-sm">
     <div class="card-body">
         <div class="d-flex justify-content-end gap-2 mb-2">
-            <a class="btn btn-outline-success btn-sm" href="{{ url_for('export_invoices', period=selected_period) }}">Excel</a>
-            <a class="btn btn-outline-primary btn-sm" target="_blank" href="{{ url_for('print_invoices', period=selected_period) }}">Çap</a>
+            <a class="btn btn-outline-success btn-sm" href="{{ url_for('export_invoices', period=selected_period, building_id=building_id) }}">Excel</a>
+            <a class="btn btn-outline-primary btn-sm" target="_blank" href="{{ url_for('print_invoices', period=selected_period, building_id=building_id) }}">Çap</a>
         </div>
         <div class="table-responsive">
             <table class="table">
-                <thead><tr><th>Mənzil</th><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Balans</th><th>Status</th><th>Tam ödəniş</th><th>Ödəniş</th><th>Hesab-faktura</th><th>Email</th></tr></thead>
+                <thead><tr>{% if buildings_all %}<th>Korpus</th>{% endif %}<th>Mənzil</th><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Balans</th><th>Status</th><th>Tam ödəniş</th><th>Ödəniş</th><th>Hesab-faktura</th><th>Email</th></tr></thead>
                 <tbody>
                 {% for i in invoices %}
                     {% set balance = (i.paid_amount - i.amount) %}
                     {% set computed_status = ('ödənilib' if i.paid_amount >= i.amount else 'ödənilməyib') %}
                     <tr>
+                        {% if buildings_all %}<td class="text-muted small">{{ i.apartment.building.name if i.apartment and i.apartment.building else '—' }}</td>{% endif %}
                         <td>{{ i.apartment.number }}</td>
                         <td>{{ i.period }}</td>
                         <td>{{ i.amount|azn }}</td>
@@ -107,7 +120,7 @@
                         </td>
                     </tr>
                 {% else %}
-                    <tr><td colspan="10" class="text-muted">Hesab tapılmadı.</td></tr>
+                    <tr><td colspan="{{ 11 if buildings_all else 10 }}" class="text-muted">Hesab tapılmadı.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>

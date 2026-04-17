@@ -8,25 +8,38 @@
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
         <form method="get" class="row g-2 align-items-end">
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label">Tarixdən</label>
                 <input class="form-control js-monthpicker" name="from_period" value="{{ from_period }}" placeholder="2026-01" required>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label">Tarixədək</label>
                 <input class="form-control js-monthpicker" name="to_period" value="{{ to_period }}" placeholder="2026-04" required>
             </div>
+            {% if buildings_all %}
             <div class="col-md-3">
+                <label class="form-label">Korpus</label>
+                <select class="form-select" name="building_id">
+                    <option value="">Hamısı</option>
+                    {% for b in buildings_all %}
+                        <option value="{{ b.id }}" {% if building_id and b.id == building_id %}selected{% endif %}>{{ b.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <div class="col-md-2">
                 <label class="form-label">Mənzil</label>
                 <select class="form-select" name="apartment_id">
                     <option value="">Hamısı</option>
                     {% for a in apartments_all %}
-                        <option value="{{ a.id }}" {% if apartment_id and a.id == apartment_id %}selected{% endif %}>{{ a.number }}</option>
+                        <option value="{{ a.id }}" {% if apartment_id and a.id == apartment_id %}selected{% endif %}>
+                            {% if a.building %}{{ a.building.name }} / {% endif %}{{ a.number }}
+                        </option>
                     {% endfor %}
                 </select>
             </div>
             <div class="col-md-3">
-                <button class="btn btn-primary w-100">Goster</button>
+                <button class="btn btn-primary w-100">Göstər</button>
             </div>
         </form>
     </div>
@@ -35,13 +48,14 @@
 <div class="card border-0 shadow-sm">
     <div class="card-body">
         <div class="d-flex justify-content-end gap-2 mb-2">
-            <a class="btn btn-outline-success btn-sm" href="{{ url_for('export_payments_report', from_period=from_period, to_period=to_period, apartment_id=apartment_id) }}">Excel</a>
-            <a class="btn btn-outline-primary btn-sm" target="_blank" href="{{ url_for('print_payments_report', from_period=from_period, to_period=to_period, apartment_id=apartment_id) }}">Çap</a>
+            <a class="btn btn-outline-success btn-sm" href="{{ url_for('export_payments_report', from_period=from_period, to_period=to_period, apartment_id=apartment_id, building_id=building_id) }}">Excel</a>
+            <a class="btn btn-outline-primary btn-sm" target="_blank" href="{{ url_for('print_payments_report', from_period=from_period, to_period=to_period, apartment_id=apartment_id, building_id=building_id) }}">Çap</a>
         </div>
         <div class="table-responsive">
             <table class="table table-sm align-middle">
                 <thead>
                     <tr>
+                        {% if buildings_all %}<th>Korpus</th>{% endif %}
                         <th>Mənzil</th>
                         {% for p in periods %}
                         <th class="text-end">{{ p }}</th>
@@ -52,6 +66,7 @@
                 <tbody>
                     {% for r in rows %}
                     <tr>
+                        {% if buildings_all %}<td class="text-muted small">{{ r.building or '—' }}</td>{% endif %}
                         <td class="fw-semibold">{{ r.apartment }}</td>
                         {% for v in r.amounts %}
                         <td class="text-end">{{ v|azn }}</td>
@@ -59,11 +74,12 @@
                         <td class="text-end fw-semibold">{{ r.row_total|azn }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="{{ 2 + (periods|length) }}" class="text-muted">Məlumat yoxdur.</td></tr>
+                    <tr><td colspan="{{ (3 if buildings_all else 2) + (periods|length) }}" class="text-muted">Məlumat yoxdur.</td></tr>
                     {% endfor %}
                 </tbody>
                 <tfoot>
                     <tr>
+                        {% if buildings_all %}<th></th>{% endif %}
                         <th>Cəmi</th>
                         {% for v in col_totals %}
                         <th class="text-end">{{ v|azn }}</th>

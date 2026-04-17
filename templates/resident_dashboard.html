@@ -9,7 +9,9 @@
     <label class="small text-muted mb-0">Mənzil seçimi</label>
     <select class="form-select form-select-sm w-auto" name="apartment_id" onchange="this.form.submit()">
         {% for apt in apartments %}
-        <option value="{{ apt.id }}" {% if apartment and apt.id == apartment.id %}selected{% endif %}>{{ apt.number }}</option>
+        <option value="{{ apt.id }}" {% if apartment and apt.id == apartment.id %}selected{% endif %}>
+            {% if apt.building %}{{ apt.building.name }} / {% endif %}{{ apt.number }}
+        </option>
         {% endfor %}
     </select>
 </form>
@@ -20,7 +22,11 @@
         <div class="card metric-card border-0 shadow-sm">
             <div class="card-body">
                 <div class="text-muted small">Mənzil</div>
-                <div class="h5 mb-0">{{ apartment.number if apartment else 'Teyin edilmeyib' }}</div>
+                <div class="h5 mb-0">
+                    {% if apartment %}
+                        {% if apartment.building %}{{ apartment.building.name }} / {% endif %}{{ apartment.number }}
+                    {% else %}Teyin edilmeyib{% endif %}
+                </div>
             </div>
         </div>
     </div>

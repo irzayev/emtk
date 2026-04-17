@@ -1,32 +1,56 @@
 {% extends "base.html" %}
 {% block content %}
 <h3 class="mb-3">Mənzillər</h3>
+
+{% if buildings %}
+<div class="mb-3 d-flex gap-2 flex-wrap align-items-center">
+    <span class="text-muted small">Korpus filtri:</span>
+    <a href="{{ url_for('admin_apartments') }}" class="btn btn-sm {% if not building_filter_id %}btn-primary{% else %}btn-outline-secondary{% endif %}">Hamısı</a>
+    {% for b in buildings %}
+    <a href="{{ url_for('admin_apartments', building_id=b.id) }}" class="btn btn-sm {% if building_filter_id == b.id %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ b.name }}</a>
+    {% endfor %}
+</div>
+{% endif %}
+
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <h5>Mənzil əlavə et</h5>
-        <form method="post" class="row g-2 g-lg-1 align-items-end flex-lg-nowrap">
+        <form method="post" class="row g-2 align-items-end">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="col-6 col-md-3 col-lg-2"><input class="form-control" name="number" placeholder="Nömrə" maxlength="4" required></div>
-            <div class="col-6 col-md-2 col-lg-1"><input class="form-control" type="number" min="-999" max="999" step="1" name="floor" placeholder="Mərtəbə" required></div>
-            <div class="col-12 col-md-4 col-lg-3">
-                <select class="form-select js-apartment-preset" name="preset_id">
-                    <option value="">Preset seçin</option>
-                    {% for p in apartment_presets %}
-                    <option value="{{ p.id }}" data-rooms="{{ p.rooms }}" data-area="{{ p.area|int }}">{{ p.name }} ({{ p.rooms }} otaq, {{ p.area|int }} m2)</option>
+            <div class="col-6 col-md-2 col-lg-1"><label class="form-label small">Nömrə</label><input class="form-control" name="number" placeholder="101" maxlength="4" required></div>
+            <div class="col-6 col-md-2 col-lg-1"><label class="form-label small">Mərtəbə</label><input class="form-control" type="number" min="-999" max="999" step="1" name="floor" placeholder="1" required></div>
+            {% if buildings %}
+            <div class="col-12 col-md-3 col-lg-2">
+                <label class="form-label small">Korpus</label>
+                <select class="form-select" name="building_id">
+                    <option value="">— Korpus seçin —</option>
+                    {% for b in buildings %}
+                    <option value="{{ b.id }}" {% if building_filter_id == b.id %}selected{% endif %}>{{ b.name }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-6 col-md-2 col-lg-1"><input class="form-control js-apartment-rooms" type="number" min="1" max="999" step="1" name="rooms" placeholder="Otaq"></div>
-            <div class="col-6 col-md-2 col-lg-1"><input class="form-control js-apartment-area" type="number" min="1" max="9999" step="1" name="area" placeholder="Sahə" required></div>
-            <div class="col-12 col-md-6 col-lg-2">
+            {% endif %}
+            <div class="col-12 col-md-3 col-lg-2">
+                <label class="form-label small">Preset</label>
+                <select class="form-select js-apartment-preset" name="preset_id">
+                    <option value="">— seçin —</option>
+                    {% for p in apartment_presets %}
+                    <option value="{{ p.id }}" data-rooms="{{ p.rooms }}" data-area="{{ p.area|int }}">{{ p.name }} ({{ p.rooms }}otaq, {{ p.area|int }}m²)</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-2 col-lg-1"><label class="form-label small">Otaq</label><input class="form-control js-apartment-rooms" type="number" min="1" max="999" step="1" name="rooms" placeholder="2"></div>
+            <div class="col-6 col-md-2 col-lg-1"><label class="form-label small">Sahə (m²)</label><input class="form-control js-apartment-area" type="number" min="1" max="9999" step="1" name="area" placeholder="65" required></div>
+            <div class="col-12 col-md-4 col-lg-2">
+                <label class="form-label small">Sahib</label>
                 <select class="form-select" name="owner_user_id" required>
                     {% for r in residents %}
                     <option value="{{ r.id }}">{{ r.full_name }} ({{ r.email }})</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-12 col-md-3 col-lg-2">
-                <button class="btn btn-primary w-100 text-nowrap">Yadda saxla</button>
+            <div class="col-12 col-md-2 col-lg-2">
+                <button class="btn btn-primary w-100 text-nowrap">Əlavə et</button>
             </div>
         </form>
     </div>
@@ -39,6 +63,7 @@
                 <thead>
                     <tr>
                         <th>№</th>
+                        {% if buildings %}<th>Korpus</th>{% endif %}
                         <th>Mərtəbə</th>
                         <th>Otaq</th>
                         <th>Sahə</th>
@@ -62,6 +87,22 @@
                                 disabled
                             >
                         </td>
+                        {% if buildings %}
+                        <td>
+                            <span class="js-apartment-view">{{ a.building.name if a.building else '—' }}</span>
+                            <select
+                                class="form-select form-select-sm js-apartment-edit d-none"
+                                name="building_id"
+                                form="edit-apartment-{{ a.id }}-form"
+                                disabled
+                            >
+                                <option value="">— yox —</option>
+                                {% for b in buildings %}
+                                <option value="{{ b.id }}" {% if a.building_id == b.id %}selected{% endif %}>{{ b.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        {% endif %}
                         <td>
                             <span class="js-apartment-view">{{ a.floor }}</span>
                             <input
@@ -91,7 +132,7 @@
                             >
                         </td>
                         <td>
-                            <span class="js-apartment-view">{{ a.area|int }} м2</span>
+                            <span class="js-apartment-view">{{ a.area|int }} m²</span>
                             <div class="js-apartment-edit d-none">
                                 <div class="input-group input-group-sm">
                                     <input
@@ -105,7 +146,7 @@
                                         form="edit-apartment-{{ a.id }}-form"
                                         disabled
                                     >
-                                    <span class="input-group-text">м2</span>
+                                    <span class="input-group-text">m²</span>
                                 </div>
                             </div>
                         </td>
@@ -180,7 +221,7 @@
                         </td>
                     </tr>
                 {% else %}
-                    <tr><td colspan="7" class="text-muted">Melumat yoxdur.</td></tr>
+                    <tr><td colspan="{{ 8 if buildings else 7 }}" class="text-muted">Məlumat yoxdur.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>

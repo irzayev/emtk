@@ -92,6 +92,13 @@ class User(db.Model):
     role = db.Column(db.String(20), nullable=False, default="resident")
 
 
+class Building(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False, unique=True)
+    address = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class Apartment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     number = db.Column(db.String(20), unique=True, nullable=False)
@@ -101,6 +108,8 @@ class Apartment(db.Model):
     owner_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     owner = db.relationship("User", backref="apartments")
     credit_balance = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
+    building_id = db.Column(db.Integer, db.ForeignKey("building.id"), nullable=True)
+    building = db.relationship("Building", backref="apartments")
 
 
 class Tariff(db.Model):
@@ -398,6 +407,18 @@ def ensure_apartment_preset_schema():
             db.create_all()
 
 
+def ensure_building_schema():
+    """Create building table if missing and add building_id column to apartment."""
+    inspector = sa_inspect(db.engine)
+    if not inspector.has_table("building"):
+        db.create_all()
+    # Add building_id to apartment if not present (for existing DBs)
+    with db.engine.connect() as conn:
+        apartment_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(apartment)")}
+        if "building_id" not in apartment_cols:
+            conn.exec_driver_sql("ALTER TABLE apartment ADD COLUMN building_id INTEGER REFERENCES building(id)")
+
+
 def ensure_money_numeric_schema():
     """
     SQLite migration: rebuild tables so monetary fields use NUMERIC instead of FLOAT/REAL.
@@ -600,6 +621,7 @@ _did_money_migration = False
 _did_default_superadmin_seed = False
 _did_apartment_schema_migration = False
 _did_tariff_scope_schema = False
+_did_building_schema = False
 
 
 def ensure_default_superadmin_seed():
@@ -626,6 +648,7 @@ def _run_role_migration_once():
     global _did_default_superadmin_seed
     global _did_apartment_schema_migration
     global _did_tariff_scope_schema
+    global _did_building_schema
     # Expense sütunları əvvəl (NUMERIC rebuild üçün category mövcud olsun).
     if not _did_expense_schema:
         try:
@@ -654,6 +677,11 @@ def _run_role_migration_once():
             ensure_tariff_scope_schema()
         finally:
             _did_tariff_scope_schema = True
+    if not _did_building_schema:
+        try:
+            ensure_building_schema()
+        finally:
+            _did_building_schema = True
     if _did_default_superadmin_seed:
         return
     try:
@@ -1271,15 +1299,24 @@ def admin_apartments():
             flash("Mərtəbə daxil edilməlidir.", "danger")
             return redirect(url_for("admin_apartments"))
         owner_user_id = int(request.form["owner_user_id"])
-        db.session.add(Apartment(number=number, floor=floor, rooms=rooms, area=area, owner_user_id=owner_user_id))
+        building_id_raw = (request.form.get("building_id", "") or "").strip()
+        building_id = int(building_id_raw) if building_id_raw.isdigit() else None
+        db.session.add(Apartment(number=number, floor=floor, rooms=rooms, area=area, owner_user_id=owner_user_id, building_id=building_id))
         db.session.commit()
         audit(f"Menzil yaradildi {number}")
         flash("Menzil elave edildi.", "success")
         return redirect(url_for("admin_apartments"))
 
-    apartments = Apartment.query.order_by(Apartment.number).all()
+    building_filter_raw = (request.args.get("building_id", "") or "").strip()
+    building_filter_id = int(building_filter_raw) if building_filter_raw.isdigit() else None
+
+    apartments_query = Apartment.query
+    if building_filter_id:
+        apartments_query = apartments_query.filter(Apartment.building_id == building_filter_id)
+    apartments = apartments_query.order_by(Apartment.number).all()
     residents = User.query.filter_by(role="resident").all()
     apartment_presets = ApartmentPreset.query.order_by(ApartmentPreset.rooms.asc(), ApartmentPreset.area.asc()).all()
+    buildings = Building.query.order_by(Building.name.asc()).all()
     debt_expr = db.case((Invoice.amount - Invoice.paid_amount > 0, Invoice.amount - Invoice.paid_amount), else_=0.0)
     debt_rows = (
         db.session.query(Invoice.apartment_id, db.func.sum(debt_expr))
@@ -1298,6 +1335,8 @@ def admin_apartments():
         residents=residents,
         apartment_presets=apartment_presets,
         debt_by_apartment_id=debt_by_apartment_id,
+        buildings=buildings,
+        building_filter_id=building_filter_id,
     )
 
 
@@ -1383,11 +1422,15 @@ def update_apartment(apartment_id):
         flash("Bu nomre ile menzil artiq movcuddur.", "warning")
         return redirect(url_for("admin_apartments"))
 
+    building_id_raw = (request.form.get("building_id", "") or "").strip()
+    building_id = int(building_id_raw) if building_id_raw.isdigit() else None
+
     apartment.number = number
     apartment.floor = floor
     apartment.rooms = rooms
     apartment.area = area
     apartment.owner_user_id = owner_user_id
+    apartment.building_id = building_id
     db.session.commit()
     audit(f"Menzil yenilendi {number}")
     flash("Menzil yenilendi.", "success")
@@ -1806,7 +1849,9 @@ def toggle_expense_paid(expense_id):
 @role_required("komendant", "superadmin")
 def admin_invoices():
     selected_period = (request.args.get("period", "") or "").strip()
-    return render_template("admin_invoices.html", **_get_admin_invoices_view_data(selected_period))
+    building_id_raw = (request.args.get("building_id") or "").strip()
+    building_id = int(building_id_raw) if building_id_raw.isdigit() else None
+    return render_template("admin_invoices.html", **_get_admin_invoices_view_data(selected_period, building_id))
 
 
 @app.route("/admin/payments/confirm/<int:payment_id>", methods=["POST"])
@@ -1940,7 +1985,9 @@ def add_payment(invoice_id):
 @role_required("komendant", "superadmin")
 def admin_history():
     selected_month = (request.args.get("month") or "").strip()
-    return render_template("admin_history.html", **_get_admin_history_view_data(selected_month))
+    building_id_raw = (request.args.get("building_id") or "").strip()
+    building_id = int(building_id_raw) if building_id_raw.isdigit() else None
+    return render_template("admin_history.html", **_get_admin_history_view_data(selected_month, building_id))
 
 
 def _iter_months_inclusive(from_period: str, to_period: str):
@@ -2008,7 +2055,7 @@ def _get_admin_expenses_view_data(period: str):
     }
 
 
-def _get_admin_invoices_view_data(selected_period: str):
+def _get_admin_invoices_view_data(selected_period: str, building_id: Optional[int] = None):
     period_rows = (
         db.session.query(Invoice.period)
         .filter(Invoice.period.isnot(None), Invoice.period != "")
@@ -2026,7 +2073,10 @@ def _get_admin_invoices_view_data(selected_period: str):
     invoices_query = Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
     if selected_period:
         invoices_query = invoices_query.filter(Invoice.period == selected_period)
-    invoices = invoices_query.order_by(apartment_number_sort.asc(), Apartment.number.asc()).all()
+    if building_id:
+        invoices_query = invoices_query.filter(Apartment.building_id == building_id)
+    building_null_sort = db.case((Apartment.building_id.is_(None), 1), else_=0)
+    invoices = invoices_query.order_by(building_null_sort.asc(), Apartment.building_id.asc(), apartment_number_sort.asc(), Apartment.number.asc()).all()
 
     dirty = False
     for inv in invoices:
@@ -2052,10 +2102,12 @@ def _get_admin_invoices_view_data(selected_period: str):
         "available_periods": available_periods,
         "prev_period": prev_period,
         "next_period": next_period,
+        "building_id": building_id,
+        "buildings_all": Building.query.order_by(Building.name.asc()).all(),
     }
 
 
-def _get_admin_history_view_data(selected_month: str):
+def _get_admin_history_view_data(selected_month: str, building_id: Optional[int] = None):
     month_rows = (
         db.session.query(db.func.strftime("%Y-%m", Payment.created_at).label("month"))
         .filter(Payment.status == "confirmed", Payment.created_at.isnot(None))
@@ -2096,6 +2148,9 @@ def _get_admin_history_view_data(selected_month: str):
         topups_query = topups_query.filter(BalanceTopUp.created_at >= month_start, BalanceTopUp.created_at < month_end)
         expenses_query = expenses_query.filter(Expense.created_at >= month_start, Expense.created_at < month_end)
 
+    if building_id:
+        payments_query = payments_query.filter(Apartment.building_id == building_id)
+
     confirmed_payments = payments_query.order_by(Payment.created_at.desc()).limit(limit).all()
     topups = topups_query.order_by(BalanceTopUp.created_at.desc()).limit(limit).all()
     expenses = expenses_query.order_by(Expense.created_at.desc()).limit(limit).all()
@@ -2103,12 +2158,16 @@ def _get_admin_history_view_data(selected_month: str):
     events = []
     for p in confirmed_payments:
         inv = p.invoice
+        apt = inv.apartment if inv else None
+        apt_label = None
+        if apt:
+            apt_label = f"{apt.building.name} / {apt.number}" if apt.building else apt.number
         events.append(
             {
                 "dt": p.created_at,
                 "type": "payment",
                 "amount": float(p.amount),
-                "apartment": inv.apartment.number if inv and inv.apartment else None,
+                "apartment": apt_label,
                 "comment": (p.comment or "").strip() or None,
                 "period": inv.period if inv else None,
             }
@@ -2155,20 +2214,26 @@ def _get_admin_history_view_data(selected_month: str):
         "available_months": available_months,
         "prev_month": prev_month,
         "next_month": next_month,
+        "building_id": building_id,
+        "buildings_all": Building.query.order_by(Building.name.asc()).all(),
     }
 
 
-def _get_admin_payments_report_view_data(from_period: str, to_period: str, apartment_id_raw: str):
+def _get_admin_payments_report_view_data(from_period: str, to_period: str, apartment_id_raw: str, building_id_raw: str = ""):
     apartment_id = int(apartment_id_raw) if apartment_id_raw.isdigit() else None
+    building_id = int(building_id_raw) if building_id_raw.isdigit() else None
     periods = list(_iter_months_inclusive(from_period, to_period))
     if len(periods) > 24:
         periods = periods[-24:]
         from_period = periods[0]
 
     apartment_number_sort = db.cast(Apartment.number, db.Integer)
-    apartments_query = Apartment.query.order_by(apartment_number_sort.asc(), Apartment.number.asc())
+    building_null_sort = db.case((Apartment.building_id.is_(None), 1), else_=0)
+    apartments_query = Apartment.query.order_by(building_null_sort.asc(), Apartment.building_id.asc(), apartment_number_sort.asc(), Apartment.number.asc())
     if apartment_id:
         apartments_query = apartments_query.filter(Apartment.id == apartment_id)
+    if building_id:
+        apartments_query = apartments_query.filter(Apartment.building_id == building_id)
     apartments = apartments_query.all()
 
     sums_query = (
@@ -2179,12 +2244,19 @@ def _get_admin_payments_report_view_data(from_period: str, to_period: str, apart
     )
     if apartment_id:
         sums_query = sums_query.filter(Apartment.id == apartment_id)
+    if building_id:
+        sums_query = sums_query.filter(Apartment.building_id == building_id)
     sums = sums_query.group_by(Apartment.id, Invoice.period).all()
     amount_by_apt_period = {(apt_id, period): float(total or 0) for apt_id, period, total in sums}
 
     rows = []
     for a in apartments:
-        row = {"apartment": a.number, "amounts": [], "row_total": 0.0}
+        row = {
+            "apartment": a.number,
+            "building": a.building.name if a.building else None,
+            "amounts": [],
+            "row_total": 0.0,
+        }
         for p in periods:
             v = amount_by_apt_period.get((a.id, p), 0.0)
             row["amounts"].append(v)
@@ -2194,11 +2266,14 @@ def _get_admin_payments_report_view_data(from_period: str, to_period: str, apart
 
     col_totals = [round(sum(r["amounts"][idx] for r in rows), 2) for idx in range(len(periods))]
     grand_total = round(sum(col_totals), 2)
+    buildings_all = Building.query.order_by(Building.name.asc()).all()
     return {
         "from_period": from_period,
         "to_period": to_period,
         "apartment_id": apartment_id,
+        "building_id": building_id,
         "apartments_all": Apartment.query.order_by(Apartment.number).all(),
+        "buildings_all": buildings_all,
         "periods": periods,
         "rows": rows,
         "col_totals": col_totals,
@@ -2218,10 +2293,11 @@ def admin_payments_report():
     from_period = (request.args.get("from_period") or default_from).strip()
     to_period = (request.args.get("to_period") or default_to).strip()
     apartment_id_raw = (request.args.get("apartment_id") or "").strip()
+    building_id_raw = (request.args.get("building_id") or "").strip()
     if len(from_period) != 7 or len(to_period) != 7:
         flash("Period duzgun deyil (YYYY-MM).", "danger")
         return redirect(url_for("dashboard"))
-    return render_template("admin_payments_report.html", **_get_admin_payments_report_view_data(from_period, to_period, apartment_id_raw))
+    return render_template("admin_payments_report.html", **_get_admin_payments_report_view_data(from_period, to_period, apartment_id_raw, building_id_raw))
 
 
 @app.route("/admin/export/payments-report/xlsx")
@@ -2234,12 +2310,13 @@ def export_payments_report():
     from_period = (request.args.get("from_period") or default_from).strip()
     to_period = (request.args.get("to_period") or default_to).strip()
     apartment_id_raw = (request.args.get("apartment_id") or "").strip()
-    data = _get_admin_payments_report_view_data(from_period, to_period, apartment_id_raw)
+    building_id_raw = (request.args.get("building_id") or "").strip()
+    data = _get_admin_payments_report_view_data(from_period, to_period, apartment_id_raw, building_id_raw)
 
-    headers = ["Mənzil"] + data["periods"] + ["Cəmi"]
+    headers = ["Korpus", "Mənzil"] + data["periods"] + ["Cəmi"]
     rows = []
     for r in data["rows"]:
-        rows.append([r["apartment"], *[_amount_to_text(v) for v in r["amounts"]], _amount_to_text(r["row_total"])])
+        rows.append([r["building"] or "", r["apartment"], *[_amount_to_text(v) for v in r["amounts"]], _amount_to_text(r["row_total"])])
     rows.append(["Cəmi", *[_amount_to_text(v) for v in data["col_totals"]], _amount_to_text(data["grand_total"])])
     title = f"Ödənişlər (mənzil/ay): {data['from_period']} - {data['to_period']}"
     filename = _safe_filename(f"payments_report_{data['from_period']}_{data['to_period']}.xlsx")
@@ -2277,14 +2354,17 @@ def export_expenses():
 @role_required("komendant", "superadmin")
 def export_invoices():
     selected_period = (request.args.get("period", "") or "").strip()
-    data = _get_admin_invoices_view_data(selected_period)
-    headers = ["Mənzil", "Period", "Hesablanıb", "Ödənilib", "Balans", "Status"]
+    building_id_raw = (request.args.get("building_id") or "").strip()
+    building_id = int(building_id_raw) if building_id_raw.isdigit() else None
+    data = _get_admin_invoices_view_data(selected_period, building_id)
+    headers = ["Korpus", "Mənzil", "Period", "Hesablanıb", "Ödənilib", "Balans", "Status"]
     rows = []
     for i in data["invoices"]:
         balance = float(i.paid_amount or 0) - float(i.amount or 0)
         status = "ödənilib" if float(i.paid_amount or 0) >= float(i.amount or 0) else "ödənilməyib"
         rows.append(
             [
+                i.apartment.building.name if i.apartment and i.apartment.building else "",
                 i.apartment.number if i.apartment else "",
                 i.period,
                 _amount_to_text(i.amount),
@@ -2304,7 +2384,9 @@ def export_invoices():
 @role_required("komendant", "superadmin")
 def export_history():
     selected_month = (request.args.get("month") or "").strip()
-    data = _get_admin_history_view_data(selected_month)
+    building_id_raw = (request.args.get("building_id") or "").strip()
+    building_id = int(building_id_raw) if building_id_raw.isdigit() else None
+    data = _get_admin_history_view_data(selected_month, building_id)
     headers = ["Tarix", "Növ", "Mənzil", "Period", "Status", "Məbləğ", "Qeyd"]
     rows = []
     for e in data["events"]:
@@ -2343,10 +2425,11 @@ def print_payments_report():
     from_period = (request.args.get("from_period") or default_from).strip()
     to_period = (request.args.get("to_period") or default_to).strip()
     apartment_id_raw = (request.args.get("apartment_id") or "").strip()
-    data = _get_admin_payments_report_view_data(from_period, to_period, apartment_id_raw)
-    headers = ["Mənzil"] + data["periods"] + ["Cəmi"]
-    rows = [[r["apartment"], *[_amount_to_text(v) for v in r["amounts"]], _amount_to_text(r["row_total"])] for r in data["rows"]]
-    rows.append(["Cəmi", *[_amount_to_text(v) for v in data["col_totals"]], _amount_to_text(data["grand_total"])])
+    building_id_raw = (request.args.get("building_id") or "").strip()
+    data = _get_admin_payments_report_view_data(from_period, to_period, apartment_id_raw, building_id_raw)
+    headers = ["Korpus", "Mənzil"] + data["periods"] + ["Cəmi"]
+    rows = [[r["building"] or "", r["apartment"], *[_amount_to_text(v) for v in r["amounts"]], _amount_to_text(r["row_total"])] for r in data["rows"]]
+    rows.append(["", "Cəmi", *[_amount_to_text(v) for v in data["col_totals"]], _amount_to_text(data["grand_total"])])
     return _render_print_report(f"Ödənişlər (mənzil/ay): {data['from_period']} - {data['to_period']}", headers, rows)
 
 
@@ -2377,13 +2460,16 @@ def print_expenses():
 @role_required("komendant", "superadmin")
 def print_invoices():
     selected_period = (request.args.get("period", "") or "").strip()
-    data = _get_admin_invoices_view_data(selected_period)
-    headers = ["Mənzil", "Period", "Hesablanıb", "Ödənilib", "Balans", "Status"]
+    building_id_raw = (request.args.get("building_id") or "").strip()
+    building_id = int(building_id_raw) if building_id_raw.isdigit() else None
+    data = _get_admin_invoices_view_data(selected_period, building_id)
+    headers = ["Korpus", "Mənzil", "Period", "Hesablanıb", "Ödənilib", "Balans", "Status"]
     rows = []
     for i in data["invoices"]:
         balance = float(i.paid_amount or 0) - float(i.amount or 0)
         rows.append(
             [
+                i.apartment.building.name if i.apartment and i.apartment.building else "",
                 i.apartment.number if i.apartment else "",
                 i.period,
                 _amount_to_text(i.amount),
@@ -2400,7 +2486,9 @@ def print_invoices():
 @role_required("komendant", "superadmin")
 def print_history():
     selected_month = (request.args.get("month") or "").strip()
-    data = _get_admin_history_view_data(selected_month)
+    building_id_raw = (request.args.get("building_id") or "").strip()
+    building_id = int(building_id_raw) if building_id_raw.isdigit() else None
+    data = _get_admin_history_view_data(selected_month, building_id)
     headers = ["Tarix", "Növ", "Mənzil", "Period", "Status", "Məbləğ", "Qeyd"]
     rows = []
     for e in data["events"]:
@@ -2793,9 +2881,51 @@ def admin_settings():
             db.session.commit()
             audit(f"Mənzil preset silindi #{preset_id}: {preset_name}")
             flash("Mənzil preset silindi.", "success")
+        elif form_type == "add_building":
+            name = (request.form.get("building_name", "") or "").strip()
+            address = (request.form.get("building_address", "") or "").strip() or None
+            if not name:
+                flash("Korpus adı vacibdir.", "danger")
+                return redirect(url_for("admin_settings"))
+            if Building.query.filter_by(name=name).first():
+                flash("Bu adda korpus artıq mövcuddur.", "warning")
+                return redirect(url_for("admin_settings"))
+            db.session.add(Building(name=name, address=address))
+            db.session.commit()
+            audit(f"Korpus əlavə edildi: {name}")
+            flash("Korpus əlavə edildi.", "success")
+        elif form_type == "update_building":
+            building_id = int(request.form["building_id"])
+            building = Building.query.get_or_404(building_id)
+            name = (request.form.get("building_name", "") or "").strip()
+            address = (request.form.get("building_address", "") or "").strip() or None
+            if not name:
+                flash("Korpus adı vacibdir.", "danger")
+                return redirect(url_for("admin_settings"))
+            duplicate = Building.query.filter(Building.name == name, Building.id != building_id).first()
+            if duplicate:
+                flash("Bu adda korpus artıq mövcuddur.", "warning")
+                return redirect(url_for("admin_settings"))
+            building.name = name
+            building.address = address
+            db.session.commit()
+            audit(f"Korpus yeniləndi #{building_id}: {name}")
+            flash("Korpus yeniləndi.", "success")
+        elif form_type == "delete_building":
+            building_id = int(request.form["building_id"])
+            building = Building.query.get_or_404(building_id)
+            if building.apartments:
+                flash("Korpusu silmək olmur: bağlı mənzillər var.", "warning")
+                return redirect(url_for("admin_settings"))
+            building_name = building.name
+            db.session.delete(building)
+            db.session.commit()
+            audit(f"Korpus silindi #{building_id}: {building_name}")
+            flash("Korpus silindi.", "success")
         return redirect(url_for("admin_settings"))
     apartment_presets = ApartmentPreset.query.order_by(ApartmentPreset.rooms.asc(), ApartmentPreset.area.asc()).all()
-    return render_template("admin_settings.html", cfg=cfg, apartment_presets=apartment_presets)
+    buildings = Building.query.order_by(Building.name.asc()).all()
+    return render_template("admin_settings.html", cfg=cfg, apartment_presets=apartment_presets, buildings=buildings)
 
 
 @app.route("/admin/reset-financial", methods=["POST"])
@@ -2995,6 +3125,7 @@ if __name__ == "__main__":
         ensure_expense_schema()
         ensure_balance_schema()
         ensure_tariff_scope_schema()
+        ensure_building_schema()
         ensure_user_role_migration()
         ensure_default_superadmin_seed()
         get_smtp_config()
