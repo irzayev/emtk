@@ -662,7 +662,7 @@ def get_smtp_config():
     return cfg
 
 
-def send_email(subject, body, recipients):
+def send_email(subject, body, recipients, html_body=None):
     cfg = get_smtp_config()
     if not cfg.host or not cfg.sender_email or not recipients:
         return False
@@ -672,6 +672,8 @@ def send_email(subject, body, recipients):
         msg["From"] = cfg.sender_email
         msg["To"] = ", ".join(recipients)
         msg.set_content(body)
+        if html_body:
+            msg.add_alternative(html_body, subtype="html")
 
         with smtplib.SMTP(cfg.host, cfg.port, timeout=20) as server:
             if cfg.use_tls:
@@ -687,6 +689,71 @@ def send_email(subject, body, recipients):
 def notify_residents(subject, body):
     recipients = [u.email for u in User.query.filter_by(role="resident").all() if u.email]
     return send_email(subject, body, recipients)
+
+
+def build_invoice_email(invoice, resident, cfg):
+    system_name = (cfg.system_name or "").strip() or "eMTK"
+    house_address = (cfg.house_address or "").strip()
+    commandant_line = f"{cfg.commandant_name}".strip() if cfg.commandant_name else ""
+    phone_line = f"{cfg.contact_phone}".strip() if cfg.contact_phone else ""
+    header = f"{system_name}"
+    if house_address:
+        header += f" | {house_address}"
+    subject = f"{system_name} - Hesab-faktura {invoice.period} - {invoice.apartment.number}"
+    debt_raw = round(invoice.amount - invoice.paid_amount, 2)
+    debt = max(0.0, debt_raw)
+    credit = max(0.0, -debt_raw)
+    body_lines = [
+        header,
+        "-" * len(header),
+        f"Sakin: {resident.full_name}",
+        f"Menzil: {invoice.apartment.number}",
+        f"Period: {invoice.period}",
+        "",
+        f"Hesablanıb: {invoice.amount:.2f} AZN",
+        f"Ödənilib: {invoice.paid_amount:.2f} AZN",
+        f"Borc: {debt:.2f} AZN",
+        f"Kredit: {credit:.2f} AZN",
+        f"Status: {invoice.status}",
+    ]
+    if commandant_line or phone_line:
+        body_lines += ["", "Elaqe:"]
+        if commandant_line:
+            body_lines.append(f"Komendant: {commandant_line}")
+        if phone_line:
+            body_lines.append(f"Telefon: {phone_line}")
+    plain_body = "\n".join(body_lines) + "\n"
+    html_body = render_template(
+        "invoice_email.html",
+        invoice=invoice,
+        resident=resident,
+        cfg=cfg,
+        system_name=system_name,
+        issue_date=datetime.now(timezone.utc),
+    )
+    return subject, plain_body, html_body
+
+
+def build_receipt_email(payment, cfg):
+    invoice = payment.invoice
+    resident = invoice.apartment.owner
+    system_name = (cfg.system_name or "").strip() or "eMTK"
+    subject = f"{system_name} - Ödəniş qəbzi #{payment.id} - {invoice.apartment.number}"
+    balance = float(invoice.paid_amount or 0) - float(invoice.amount or 0)
+    plain_body = (
+        f"{system_name}\n"
+        f"Ödəniş qəbzi #{payment.id}\n"
+        f"Sakin: {resident.full_name}\n"
+        f"Mənzil: {invoice.apartment.number}\n"
+        f"Period: {invoice.period}\n"
+        f"Ödəniş: {float(payment.amount):.2f} AZN\n"
+        f"Hesablanıb: {float(invoice.amount):.2f} AZN\n"
+        f"Ödənilib: {float(invoice.paid_amount):.2f} AZN\n"
+        f"Balans: {balance:.2f} AZN\n"
+        f"Tarix: {(payment.created_at or datetime.now(timezone.utc)).strftime('%d.%m.%Y %H:%M')}\n"
+    )
+    html_body = render_template("receipt_email.html", payment=payment, cfg=cfg, system_name=system_name)
+    return subject, plain_body, html_body
 
 
 @app.context_processor
@@ -1667,10 +1734,11 @@ def admin_invoices():
     if selected_period and selected_period not in available_periods:
         selected_period = available_periods[0] if available_periods else ""
 
-    invoices_query = Invoice.query
+    apartment_number_sort = db.cast(Apartment.number, db.Integer)
+    invoices_query = Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
     if selected_period:
         invoices_query = invoices_query.filter(Invoice.period == selected_period)
-    invoices = invoices_query.order_by(Invoice.created_at.desc()).all()
+    invoices = invoices_query.order_by(apartment_number_sort.asc(), Apartment.number.asc()).all()
 
     dirty = False
     for inv in invoices:
@@ -1736,6 +1804,11 @@ def confirm_payment(payment_id):
         audit(f"Odenis tesdiqlendi #{payment.id} {apply_amount:.2f} AZN (kredit -{removed:.2f})")
     else:
         audit(f"Odenis tesdiqlendi #{payment.id} {apply_amount:.2f} AZN")
+    resident = invoice.apartment.owner
+    if resident and resident.email:
+        cfg = get_smtp_config()
+        subject, body, html_body = build_receipt_email(payment, cfg)
+        send_email(subject, body, [resident.email], html_body=html_body)
     flash("Odenis tesdiqlendi.", "success")
     period = (request.form.get("period", "") or "").strip()
     return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
@@ -1784,17 +1857,16 @@ def add_payment(invoice_id):
     # FIX (warning #1): same try/except guard as confirm_payment.
     try:
         result = _apply_payment_delta(invoice, apply_amount)
-        db.session.add(
-            Payment(
-                invoice_id=invoice.id,
-                amount=apply_amount,
-                comment=comment,
-                status="confirmed",
-                reviewer_user_id=current_user().id,
-                reviewed_at=now,
-                created_at=now,
-            )
+        payment = Payment(
+            invoice_id=invoice.id,
+            amount=apply_amount,
+            comment=comment,
+            status="confirmed",
+            reviewer_user_id=current_user().id,
+            reviewed_at=now,
+            created_at=now,
         )
+        db.session.add(payment)
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -1810,6 +1882,11 @@ def add_payment(invoice_id):
         audit(f"Odenis daxil edildi invoice#{invoice.id} {apply_amount:.2f} AZN (kredit -{removed:.2f})")
     else:
         audit(f"Odenis daxil edildi invoice#{invoice.id} {apply_amount:.2f} AZN")
+    resident = invoice.apartment.owner
+    if resident and resident.email:
+        cfg = get_smtp_config()
+        subject, body, html_body = build_receipt_email(payment, cfg)
+        send_email(subject, body, [resident.email], html_body=html_body)
     flash("Odenis daxil edildi.", "success")
     period = (request.form.get("period", "") or "").strip()
     return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
@@ -1965,7 +2042,8 @@ def admin_payments_report():
         periods = periods[-24:]
         from_period = periods[0]
 
-    apartments_query = Apartment.query.order_by(Apartment.number)
+    apartment_number_sort = db.cast(Apartment.number, db.Integer)
+    apartments_query = Apartment.query.order_by(apartment_number_sort.asc(), Apartment.number.asc())
     if apartment_id:
         apartments_query = apartments_query.filter(Apartment.id == apartment_id)
     apartments = apartments_query.all()
@@ -2271,38 +2349,8 @@ def send_invoice_email(invoice_id):
         flash("Sakinin email adresi yoxdur.", "warning")
         return redirect(url_for("admin_invoices"))
     cfg = get_smtp_config()
-    system_name = (cfg.system_name or "").strip() or "eMTK"
-    house_address = (cfg.house_address or "").strip()
-    commandant_line = f"{cfg.commandant_name}".strip() if cfg.commandant_name else ""
-    phone_line = f"{cfg.contact_phone}".strip() if cfg.contact_phone else ""
-    header = f"{system_name}"
-    if house_address:
-        header += f" | {house_address}"
-    subject = f"{system_name} - Hesab-faktura {invoice.period} - {invoice.apartment.number}"
-    debt_raw = round(invoice.amount - invoice.paid_amount, 2)
-    debt = max(0.0, debt_raw)
-    credit = max(0.0, -debt_raw)
-    body_lines = [
-        header,
-        "-" * len(header),
-        f"Sakin: {resident.full_name}",
-        f"Menzil: {invoice.apartment.number}",
-        f"Period: {invoice.period}",
-        "",
-        f"Hesablanıb: {invoice.amount:.2f} AZN",
-        f"Ödənilib: {invoice.paid_amount:.2f} AZN",
-        f"Borc: {debt:.2f} AZN",
-        f"Kredit: {credit:.2f} AZN",
-        f"Status: {invoice.status}",
-    ]
-    if commandant_line or phone_line:
-        body_lines += ["", "Elaqe:"]
-        if commandant_line:
-            body_lines.append(f"Komendant: {commandant_line}")
-        if phone_line:
-            body_lines.append(f"Telefon: {phone_line}")
-    body = "\n".join(body_lines) + "\n"
-    if send_email(subject, body, [resident.email]):
+    subject, body, html_body = build_invoice_email(invoice, resident, cfg)
+    if send_email(subject, body, [resident.email], html_body=html_body):
         flash("Hesab-faktura email ilə göndərildi.", "success")
     else:
         flash("Email gonderilemedi. SMTP ayarlarini yoxlayin.", "danger")

@@ -9,29 +9,33 @@
 
 <div class="card border-0 shadow-sm">
     <div class="card-body">
-        <div class="d-flex justify-content-between flex-wrap gap-3">
+        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
             <div>
-                <div class="text-muted small">Qəbz</div>
-                <div class="h5 mb-0">#{{ payment.id }}</div>
+                <div class="h4 mb-1">{{ system_name }}</div>
+                {% if inv.apartment.owner %}
+                <div class="small text-muted">
+                    <div><strong>Sakin:</strong> {{ inv.apartment.owner.full_name }}</div>
+                    {% if inv.apartment.owner.email %}<div>{{ inv.apartment.owner.email }}</div>{% endif %}
+                    {% if inv.apartment.owner.phone %}<div>{{ inv.apartment.owner.phone }}</div>{% endif %}
+                </div>
+                {% endif %}
             </div>
             <div class="text-end">
-                <div class="text-muted small">Tarix</div>
-                <div class="fw-semibold">{{ payment.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                <div class="fw-semibold">Ödəniş qəbzi #{{ payment.id }}</div>
+                <div class="text-muted small">Tarix: {{ payment.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                <div class="text-muted small">Period: {{ inv.period }}</div>
             </div>
         </div>
 
         <hr class="my-3">
 
         <div class="row g-3">
-            <div class="col-md-4">
+            <div class="col-md-6">
                 <div class="text-muted small">Mənzil</div>
                 <div class="fw-semibold">{{ inv.apartment.number }}</div>
+                <div class="small text-muted">Sahə: {{ inv.apartment.area|int }} м2</div>
             </div>
-            <div class="col-md-4">
-                <div class="text-muted small">Period</div>
-                <div class="fw-semibold">{{ inv.period }}</div>
-            </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
                 <div class="text-muted small">Status</div>
                 <div class="fw-semibold">
                     <span class="badge bg-{{ payment_status_badge(payment.status) }}">{{ payment_status_label(payment.status) }}</span>
@@ -39,24 +43,41 @@
             </div>
         </div>
 
-        <div class="row g-3 mt-1">
-            <div class="col-md-4">
-                <div class="text-muted small">Ödəniş məbləği</div>
-                <div class="h5 mb-0 text-success">{{ payment.amount|azn }}</div>
-            </div>
-            <div class="col-md-4">
-                <div class="text-muted small">Hesablanıb</div>
-                <div class="fw-semibold">{{ inv.amount|azn }}</div>
-            </div>
-            <div class="col-md-4">
-                <div class="text-muted small">Balans</div>
-                <div class="h5 mb-0 {% if balance < 0 %}text-danger{% elif balance > 0 %}text-success{% else %}text-muted{% endif %}">{{ balance|azn }}</div>
-            </div>
+        <div class="table-responsive mt-4">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Təsvir</th>
+                        <th class="text-end">Məbləğ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Ödəniş məbləği</td>
+                        <td class="text-end text-success fw-semibold">{{ payment.amount|azn }}</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th class="text-end">Hesablanıb</th>
+                        <th class="text-end">{{ inv.amount|azn }}</th>
+                    </tr>
+                    <tr>
+                        <th class="text-end">Ödənilib</th>
+                        <th class="text-end">{{ inv.paid_amount|azn }}</th>
+                    </tr>
+                    <tr>
+                        <th class="text-end">Balans</th>
+                        <th class="text-end">
+                            <span class="{% if balance < 0 %}text-danger{% elif balance > 0 %}text-success{% else %}text-muted{% endif %} fw-semibold">{{ balance|azn }}</span>
+                        </th>
+                    </tr>
+                </tfoot>
+            </table>
         </div>
 
         {% if payment.comment %}
-        <hr class="my-3">
-        <div class="text-muted small">Qeyd</div>
+        <div class="small text-muted">Qeyd</div>
         <div>{{ payment.comment }}</div>
         {% endif %}
     </div>
