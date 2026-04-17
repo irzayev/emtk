@@ -18,7 +18,7 @@
             </div>
             <div class="col-6 col-md-2 col-lg-1"><input class="form-control js-apartment-rooms" type="number" min="1" max="999" step="1" name="rooms" placeholder="Otaq"></div>
             <div class="col-6 col-md-2 col-lg-1"><input class="form-control js-apartment-area" type="number" min="1" max="9999" step="1" name="area" placeholder="Sahə" required></div>
-            <div class="col-12 col-md-6 col-lg-3">
+            <div class="col-12 col-md-6 col-lg-2">
                 <select class="form-select" name="owner_user_id" required>
                     {% for r in residents %}
                     <option value="{{ r.id }}">{{ r.full_name }} ({{ r.email }})</option>
