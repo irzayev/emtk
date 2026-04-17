@@ -13,6 +13,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -1158,17 +1159,24 @@ def admin_apartments():
 @role_required("komendant", "superadmin")
 def delete_apartment(apartment_id):
     apartment = Apartment.query.get_or_404(apartment_id)
-    has_invoices = Invoice.query.filter_by(apartment_id=apartment.id).first() is not None
-    has_votes = Vote.query.filter_by(apartment_id=apartment.id).first() is not None
+    # COUNT avoids loading full ORM rows (Vote enum / invoice edge cases on some DBs).
+    try:
+        has_invoices = Invoice.query.filter_by(apartment_id=apartment.id).count() > 0
+        has_votes = Vote.query.filter_by(apartment_id=apartment.id).count() > 0
+    except SQLAlchemyError:
+        app.logger.exception("delete_apartment precheck failed apartment_id=%s", apartment_id)
+        flash("Menzil silinmədi: hesab/səs yoxlanışı alınmadı.", "danger")
+        return redirect(url_for("admin_apartments"))
     if has_invoices or has_votes:
         flash("Menzili silmek olmur: bagli hesab ve ya sesler var.", "warning")
         return redirect(url_for("admin_apartments"))
 
     apartment_number = apartment.number
-    # Tariff scope rows reference apartment; remove them or FK commit fails (Postgres / SQLite with FKs).
+    apt_pk = apartment.id
+    # Core DELETEs: avoid ORM session.delete(apartment), which can touch relationships / flush order.
     try:
-        TariffApartment.query.filter_by(apartment_id=apartment.id).delete(synchronize_session=False)
-        db.session.delete(apartment)
+        db.session.execute(sa_delete(TariffApartment).where(TariffApartment.apartment_id == apt_pk))
+        db.session.execute(sa_delete(Apartment).where(Apartment.id == apt_pk))
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
@@ -1179,6 +1187,11 @@ def delete_apartment(apartment_id):
         db.session.rollback()
         app.logger.exception("delete_apartment database error apartment_id=%s", apartment_id)
         flash("Menzil silinmədi: verilənlər bazası xətası.", "danger")
+        return redirect(url_for("admin_apartments"))
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("delete_apartment unexpected error apartment_id=%s", apartment_id)
+        flash("Menzil silinmədi: gözlənilməz xəta.", "danger")
         return redirect(url_for("admin_apartments"))
 
     try:
