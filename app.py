@@ -1,6 +1,9 @@
 import os
 import re
+import shutil
 import smtplib
+import sqlite3
+import tempfile
 import uuid
 from io import BytesIO
 from decimal import Decimal
@@ -11,7 +14,18 @@ from functools import wraps
 from pathlib import Path
 from typing import Optional
 
-from flask import Flask, abort, flash, redirect, render_template, request, send_file, session, url_for
+from flask import (
+    Flask,
+    abort,
+    after_this_request,
+    flash,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
+)
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
@@ -640,6 +654,23 @@ def ensure_default_superadmin_seed():
     db.session.commit()
 
 
+def run_startup_migrations():
+    """Create tables and apply idempotent schema patches (local dev, workers, after DB restore)."""
+    db.create_all()
+    ensure_money_numeric_schema()
+    ensure_poll_schema()
+    ensure_payment_schema()
+    ensure_apartment_schema()
+    ensure_apartment_preset_schema()
+    ensure_system_schema()
+    ensure_expense_schema()
+    ensure_balance_schema()
+    ensure_tariff_scope_schema()
+    ensure_building_schema()
+    ensure_user_role_migration()
+    ensure_default_superadmin_seed()
+
+
 @app.before_request
 def _run_role_migration_once():
     global _did_role_migration
@@ -754,6 +785,37 @@ def get_smtp_config():
         db.session.add(cfg)
         db.session.commit()
     return cfg
+
+
+def sqlite_main_database_path() -> Optional[Path]:
+    """Filesystem path to the on-disk SQLite database, or None if not file-based SQLite."""
+    if db.engine.dialect.name != "sqlite":
+        return None
+    database = db.engine.url.database
+    if not database or database == ":memory:":
+        return None
+    p = Path(database)
+    return p if p.is_absolute() else (Path.cwd() / p).resolve()
+
+
+def validate_emtk_sqlite_file(path: Path) -> tuple[bool, str]:
+    """Return (ok, error_message) if file is a plausible eMTK SQLite backup."""
+    try:
+        conn = sqlite3.connect(str(path), timeout=10)
+        try:
+            rows = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchall()
+            tables = {r[0] for r in rows}
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        return False, f"SQLite faylı oxunmur: {exc}"
+    required = {"user", "apartment", "smtp_config"}
+    missing = required - tables
+    if missing:
+        return False, "Bu fayl eMTK bazasının ehtiyat nüsxəsi kimi tanınmadı (cədvəllər çatışmır)."
+    return True, ""
 
 
 def send_email(subject, body, recipients, html_body=None):
@@ -2926,7 +2988,131 @@ def admin_settings():
         return redirect(url_for("admin_settings"))
     apartment_presets = ApartmentPreset.query.order_by(ApartmentPreset.rooms.asc(), ApartmentPreset.area.asc()).all()
     buildings = Building.query.order_by(Building.name.asc()).all()
-    return render_template("admin_settings.html", cfg=cfg, apartment_presets=apartment_presets, buildings=buildings)
+    db_path = sqlite_main_database_path()
+    database_backup_supported = db_path is not None and db_path.is_file()
+    return render_template(
+        "admin_settings.html",
+        cfg=cfg,
+        apartment_presets=apartment_presets,
+        buildings=buildings,
+        database_backup_supported=database_backup_supported,
+    )
+
+
+@app.route("/admin/settings/database-export")
+@login_required
+@role_required("superadmin", "komendant")
+def admin_database_export():
+    db_path = sqlite_main_database_path()
+    if not db_path or not db_path.is_file():
+        flash("Verilənlər bazasının ixracı yalnız fayl əsaslı SQLite üçün mövcuddur.", "warning")
+        return redirect(url_for("admin_settings"))
+    tmp_fd, tmp_name = tempfile.mkstemp(prefix="emtk_export_", suffix=".db")
+    os.close(tmp_fd)
+    tmp_path = Path(tmp_name)
+    try:
+        src = sqlite3.connect(str(db_path), timeout=120)
+        try:
+            dst = sqlite3.connect(str(tmp_path))
+            try:
+                with dst:
+                    src.backup(dst)
+            finally:
+                dst.close()
+        finally:
+            src.close()
+    except (sqlite3.Error, OSError) as exc:
+        tmp_path.unlink(missing_ok=True)
+        flash(f"Yedək yaradılmadı: {exc}", "danger")
+        return redirect(url_for("admin_settings"))
+
+    stamp = utc_to_local(datetime.now(timezone.utc)).strftime("%Y%m%d_%H%M%S")
+    download_name = f"emtk_backup_{stamp}.db"
+
+    @after_this_request
+    def _cleanup_export_temp(response):
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return response
+
+    audit("Verilənlər bazası ixrac edildi (SQLite .db)")
+    return send_file(
+        tmp_path,
+        as_attachment=True,
+        download_name=download_name,
+        mimetype="application/vnd.sqlite3",
+    )
+
+
+@app.route("/admin/settings/database-import", methods=["POST"])
+@login_required
+@role_required("superadmin")
+def admin_database_import():
+    db_path = sqlite_main_database_path()
+    if not db_path or not db_path.is_file():
+        flash("Verilənlər bazasının idxalı yalnız fayl əsaslı SQLite üçün mövcuddur.", "warning")
+        return redirect(url_for("admin_settings"))
+
+    user = db.session.get(User, session.get("user_id"))
+    password = request.form.get("confirm_password", "")
+    if not user or not check_password_hash(user.password_hash, password):
+        flash("Şifrə yanlışdır. Idxal ləğv edildi.", "danger")
+        return redirect(url_for("admin_settings"))
+
+    upload = request.files.get("backup_file")
+    if not upload or not upload.filename:
+        flash("Yedək .db faylını seçin.", "danger")
+        return redirect(url_for("admin_settings"))
+
+    ext = upload.filename.rsplit(".", 1)[-1].lower() if "." in upload.filename else ""
+    if ext not in ("db", "sqlite", "sqlite3"):
+        flash("Yalnız SQLite yedək faylı (.db) qəbul edilir.", "warning")
+        return redirect(url_for("admin_settings"))
+
+    tmp_fd, tmp_name = tempfile.mkstemp(prefix="emtk_import_", suffix=".db")
+    os.close(tmp_fd)
+    tmp_path = Path(tmp_name)
+    try:
+        upload.save(tmp_path)
+        ok, err = validate_emtk_sqlite_file(tmp_path)
+        if not ok:
+            flash(err, "danger")
+            return redirect(url_for("admin_settings"))
+
+        stamp = utc_to_local(datetime.now(timezone.utc)).strftime("%Y%m%d_%H%M%S")
+        safety_copy = db_path.with_name(f"{db_path.stem}.before_restore_{stamp}{db_path.suffix}")
+        try:
+            shutil.copy2(db_path, safety_copy)
+        except OSError:
+            safety_copy = None
+
+        db.session.remove()
+        db.engine.dispose()
+        try:
+            shutil.copy2(tmp_path, db_path)
+        except OSError as exc:
+            flash(f"Baza faylı əvəz edilmədi: {exc}", "danger")
+            return redirect(url_for("admin_settings"))
+
+        try:
+            run_startup_migrations()
+            get_smtp_config()
+        except SQLAlchemyError as exc:
+            flash(f"Bərpa sonrası sxem yoxlaması uğursuz: {exc}. Köhnə nüsxə: {safety_copy or 'yoxdur'}.", "danger")
+            return redirect(url_for("admin_settings"))
+
+        audit("Verilənlər bazası idxal ilə bərpa edildi (SQLite)")
+        session.clear()
+        flash(
+            "Baza uğurla bərpa edildi. Köhnə fayl təhlükəsizlik nüsxəsi kimi saxlanıla bilər. "
+            "Yenidən daxil olun.",
+            "success",
+        )
+        return redirect(url_for("login"))
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 @app.route("/admin/reset-financial", methods=["POST"])
@@ -3116,19 +3302,7 @@ def init_data():
 
 if __name__ == "__main__":
     with app.app_context():
-        db.create_all()
-        ensure_money_numeric_schema()
-        ensure_poll_schema()
-        ensure_payment_schema()
-        ensure_apartment_schema()
-        ensure_apartment_preset_schema()
-        ensure_system_schema()
-        ensure_expense_schema()
-        ensure_balance_schema()
-        ensure_tariff_scope_schema()
-        ensure_building_schema()
-        ensure_user_role_migration()
-        ensure_default_superadmin_seed()
+        run_startup_migrations()
         get_smtp_config()
     host = os.getenv("FLASK_HOST", "0.0.0.0")
     port = int(os.getenv("FLASK_PORT", "5000"))

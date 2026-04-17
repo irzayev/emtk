@@ -81,6 +81,58 @@
             </div>
         </form>
         <hr>
+        <h5 class="mb-3">Verilənlər bazası yedəyi</h5>
+        {% if database_backup_supported %}
+        <p class="text-muted small mb-3">
+            Tam SQLite nüsxəsi: istifadəçilər, mənzillər, məzmun, SMTP və sistem məlumatları, maliyyə və tarixçə.
+            PostgreSQL və ya yaddaşda saxlanan SQLite üçün bu bölmə əlçatan deyil.
+        </p>
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+            <a class="btn btn-outline-primary" href="{{ url_for('admin_database_export') }}">Yedəyi yüklə (.db)</a>
+            {% if session.get('role') == 'superadmin' %}
+            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#importDatabaseModal">
+                Yedəkdən bərpa et
+            </button>
+            {% endif %}
+        </div>
+        {% if session.get('role') == 'superadmin' %}
+        <div class="modal fade" id="importDatabaseModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header border-0 pb-0">
+                        <h5 class="modal-title text-danger">Yedəkdən bərpa (idxal)</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-danger py-2 small mb-3">
+                            <strong>Diqqət:</strong> cari baza tam əvəz olunacaq. Əvvəlki fayl avtomatik
+                            <code>.before_restore_…</code> adı ilə saxlanılmağa çalışılır. Əməldən sonra təhlükəsizlik üçün
+                            sistem sizi çıxaracaq — yenidən daxil olun.
+                        </div>
+                        <form method="post" action="{{ url_for('admin_database_import') }}" enctype="multipart/form-data" id="importDatabaseForm">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Yedək faylı (.db)</label>
+                                <input class="form-control" type="file" name="backup_file" accept=".db,.sqlite,.sqlite3" required>
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label fw-semibold">Təsdiq üçün superadmin şifrəsi</label>
+                                <input class="form-control" type="password" name="confirm_password" autocomplete="current-password" required placeholder="Şifrə">
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer border-0 pt-0">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Ləğv et</button>
+                        <button type="button" class="btn btn-danger" onclick="document.getElementById('importDatabaseForm').submit()">Bəli, bazanı bərpa et</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="text-muted small mb-0">İxrac və idxal yalnız diskdə saxlanan SQLite verilənlər bazası üçün mövcuddur.</p>
+        {% endif %}
+        <hr>
         <h5 class="mb-3">SMTP Ayarlari</h5>
         <form method="post" class="row g-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
