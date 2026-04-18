@@ -5,19 +5,73 @@
         <div class="card border-0 shadow-sm rounded-4">
             <div class="card-body p-4">
                 <h4 class="fw-bold mb-3">{{ system_name }} Giris</h4>
-                <form method="post">
+                <ul class="nav nav-pills nav-fill mb-3" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#loginPhoneTab" type="button">Telefon</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#loginEmailTab" type="button">Email</button>
+                    </li>
+                </ul>
+                <form method="post" id="loginForm">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-3">
-                        <label class="form-label">Telefon və ya email</label>
-                        <input class="form-control" type="text" name="login" autocomplete="username" placeholder="+994XXXXXXXXX" required>
-                        <div class="form-text">İlkin olaraq telefon nömrənizlə daxil olun (+994…). Email də qəbul edilir.</div>
+                    <input type="hidden" name="login" id="loginHidden">
+
+                    <div class="tab-content mb-3">
+                        <div class="tab-pane fade show active" id="loginPhoneTab">
+                            <label class="form-label">Telefon</label>
+                            <div class="input-group">
+                                <span class="input-group-text">+994</span>
+                                <input class="form-control" type="tel" id="loginPhone"
+                                       inputmode="numeric" autocomplete="tel-national"
+                                       maxlength="9" pattern="[0-9]{9}"
+                                       placeholder="XXXXXXXXX">
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="loginEmailTab">
+                            <label class="form-label">Email</label>
+                            <input class="form-control" type="email" id="loginEmail"
+                                   autocomplete="email" placeholder="example@mail.com">
+                        </div>
                     </div>
+
                     <div class="mb-3">
                         <label class="form-label">Şifrə</label>
-                        <input class="form-control" type="password" name="password" required>
+                        <input class="form-control" type="password" name="password" autocomplete="current-password" required>
                     </div>
-                    <button class="btn btn-primary w-100">Daxil ol</button>
+                    <button class="btn btn-primary w-100" type="submit">Daxil ol</button>
                 </form>
+                <script>
+                (function () {
+                    const form = document.getElementById('loginForm');
+                    const hidden = document.getElementById('loginHidden');
+                    const phone = document.getElementById('loginPhone');
+                    const email = document.getElementById('loginEmail');
+                    const tabPhoneBtn = document.querySelector('[data-bs-target="#loginPhoneTab"]');
+                    const tabEmailBtn = document.querySelector('[data-bs-target="#loginEmailTab"]');
+                    if (!form || !hidden || !phone || !email) return;
+
+                    phone.addEventListener('input', () => {
+                        phone.value = phone.value.replace(/\D+/g, '').slice(0, 9);
+                    });
+
+                    function activeMode() {
+                        return tabEmailBtn && tabEmailBtn.classList.contains('active') ? 'email' : 'phone';
+                    }
+
+                    form.addEventListener('submit', (e) => {
+                        if (activeMode() === 'email') {
+                            const v = (email.value || '').trim();
+                            if (!v) { e.preventDefault(); email.focus(); return; }
+                            hidden.value = v;
+                        } else {
+                            const v = phone.value.replace(/\D+/g, '');
+                            if (v.length !== 9) { e.preventDefault(); phone.focus(); return; }
+                            hidden.value = '+994' + v;
+                        }
+                    });
+                })();
+                </script>
                 <a class="btn btn-outline-secondary w-100 mt-2" href="{{ url_for('register') }}">Qeydiyyat</a>
                 <div class="small text-muted mt-3">
                 </div>

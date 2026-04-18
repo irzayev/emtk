@@ -8,15 +8,22 @@
                 <div class="alert alert-info py-2 small">
                     Qeydiyyatdan sonra menzil komendant ve ya administrator terefinden teyin edilir.
                 </div>
-                <form method="post" class="row g-2">
+                <form method="post" class="row g-2" id="registerForm">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="phone" id="phoneHidden">
                     <div class="col-12">
                         <label class="form-label">Ad Soyad</label>
                         <input class="form-control" name="full_name" required>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Telefon</label>
-                        <input class="form-control" name="phone" placeholder="+994XXXXXXXXX" pattern="\+994[0-9]{9}" title="Format: +994XXXXXXXXX">
+                        <div class="input-group">
+                            <span class="input-group-text">+994</span>
+                            <input class="form-control" type="tel" id="phoneLocal"
+                                   inputmode="numeric" autocomplete="tel-national"
+                                   maxlength="9" pattern="[0-9]{9}"
+                                   placeholder="XXXXXXXXX" title="9 rəqəm">
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Email</label>
@@ -31,6 +38,22 @@
                         <a class="btn btn-outline-secondary" href="{{ url_for('login') }}">Giris sehifesi</a>
                     </div>
                 </form>
+                <script>
+                (function () {
+                    const form = document.getElementById('registerForm');
+                    const local = document.getElementById('phoneLocal');
+                    const hidden = document.getElementById('phoneHidden');
+                    if (!form || !local || !hidden) return;
+                    // Разрешаем только цифры.
+                    local.addEventListener('input', () => {
+                        local.value = local.value.replace(/\D+/g, '').slice(0, 9);
+                    });
+                    form.addEventListener('submit', () => {
+                        const v = local.value.replace(/\D+/g, '');
+                        hidden.value = v ? ('+994' + v) : '';
+                    });
+                })();
+                </script>
             </div>
         </div>
     </div>
