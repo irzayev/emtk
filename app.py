@@ -65,6 +65,19 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
 app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "1") == "1"
 
+# За reverse proxy (nginx/caddy/traefik) Flask сам видит http/локальный хост,
+# поэтому url_for(_external=True) генерировал бы http-ссылки. ProxyFix
+# учитывает X-Forwarded-Proto/Host/For. Число прокси регулируется TRUSTED_PROXIES.
+try:
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    _trusted = max(1, int(os.getenv("TRUSTED_PROXIES", "1")))
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=_trusted, x_proto=_trusted, x_host=_trusted, x_prefix=_trusted)
+except Exception:
+    pass
+
+# Предпочтительная схема для url_for(_external=True) если прокси не выставил заголовок.
+app.config["PREFERRED_URL_SCHEME"] = os.getenv("PREFERRED_URL_SCHEME", "https")
+
 # CSRF protection for all mutating requests.
 csrf = CSRFProtect(app)
 

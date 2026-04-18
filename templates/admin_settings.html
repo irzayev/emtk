@@ -229,7 +229,7 @@
             </div>
             <div class="col-md-4">
                 <label class="form-label">Webhook URL</label>
-                <input class="form-control" readonly value="{{ url_for('whatsapp_webhook', secret=wa_cfg.webhook_secret, _external=True) }}">
+                <input class="form-control" readonly value="{{ url_for('whatsapp_webhook', secret=wa_cfg.webhook_secret, _external=True, _scheme='https') }}">
                 <small class="text-muted">Bu URL-i Evolution API-də webhook kimi təyin edin (event: messages.upsert).</small>
             </div>
             <div class="col-12">
