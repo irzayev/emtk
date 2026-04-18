@@ -49,6 +49,7 @@
                         <th>Telefon</th>
                         <th>Email</th>
                         <th>Rol</th>
+                        <th title="WhatsApp bildirişləri">WA</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -60,6 +61,17 @@
                         <td class="text-muted small">{{ u.phone or '-' }}</td>
                         <td>{{ u.email }}</td>
                         <td><span class="badge bg-secondary">{{ u.role }}</span></td>
+                        <td>
+                            {% if u.whatsapp_connected %}
+                            <span title="WhatsApp bildirişlərinə qoşulub{% if u.whatsapp_connected_at %} — {{ u.whatsapp_connected_at.strftime('%d.%m.%Y %H:%M') }}{% endif %}">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="#25D366" viewBox="0 0 16 16">
+                                    <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592"/>
+                                </svg>
+                            </span>
+                            {% else %}
+                            <span class="text-muted" title="Qoşulmayıb">—</span>
+                            {% endif %}
+                        </td>
                         <td class="text-end">
                             {% if session.get('role') == 'superadmin' or u.role != 'superadmin' %}
                             <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-user-{{ u.id }}">Redaktə et</button>
@@ -74,7 +86,7 @@
                     </tr>
                     {% if session.get('role') == 'superadmin' or u.role != 'superadmin' %}
                     <tr class="collapse" id="edit-user-{{ u.id }}">
-                        <td colspan="6" class="bg-light">
+                        <td colspan="7" class="bg-light">
                             <form method="post" action="{{ url_for('admin_user_update', user_id=u.id) }}" class="row g-2">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <div class="col-md-4">
@@ -111,7 +123,7 @@
                     </tr>
                     {% endif %}
                     {% else %}
-                    <tr><td colspan="6" class="text-muted">İstifadəçi yoxdur.</td></tr>
+                    <tr><td colspan="7" class="text-muted">İstifadəçi yoxdur.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

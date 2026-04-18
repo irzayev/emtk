@@ -1,10 +1,14 @@
 import calendar
+import json
 import os
 import re
+import secrets
 import shutil
 import smtplib
 import sqlite3
 import tempfile
+import threading
+import time as _time
 import uuid
 from io import BytesIO
 from decimal import Decimal
@@ -37,6 +41,8 @@ from sqlalchemy import exists, inspect as sa_inspect, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
+
+import requests
 
 
 app = Flask(__name__)
@@ -123,6 +129,9 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="resident")
+    whatsapp_connected = db.Column(db.Boolean, nullable=False, default=False)
+    whatsapp_connected_at = db.Column(db.DateTime, nullable=True)
+    whatsapp_jid = db.Column(db.String(64), nullable=True)
 
 
 class Building(db.Model):
@@ -205,6 +214,32 @@ class SmtpConfig(db.Model):
     house_address = db.Column(db.String(255), nullable=True)
     commandant_name = db.Column(db.String(120), nullable=True)
     contact_phone = db.Column(db.String(50), nullable=True)
+
+
+class WhatsappConfig(db.Model):
+    """Evolution API (WhatsApp) integration settings — singleton row."""
+    id = db.Column(db.Integer, primary_key=True)
+    enabled = db.Column(db.Boolean, nullable=False, default=False)
+    api_url = db.Column(db.String(255), nullable=True)
+    api_key = db.Column(db.String(255), nullable=True)
+    instance = db.Column(db.String(120), nullable=True)
+    service_number = db.Column(db.String(30), nullable=True)  # номер бота, куда пишет резидент
+    bulk_limit = db.Column(db.Integer, nullable=False, default=10)
+    bulk_window_sec = db.Column(db.Integer, nullable=False, default=300)
+    webhook_secret = db.Column(db.String(64), nullable=True)
+
+
+class WhatsappQueue(db.Model):
+    """Очередь исходящих WhatsApp-сообщений для rate-limited рассылки."""
+    id = db.Column(db.Integer, primary_key=True)
+    recipient_phone = db.Column(db.String(30), nullable=False)
+    text = db.Column(db.Text, nullable=False)
+    invoice_id = db.Column(db.Integer, db.ForeignKey("invoice.id"), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="pending")  # pending|sent|failed|skipped
+    error = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    sent_at = db.Column(db.DateTime, nullable=True)
 
 
 class WorkLog(db.Model):
@@ -648,6 +683,21 @@ def ensure_user_role_migration():
         conn.exec_driver_sql("UPDATE user SET role='komendant' WHERE role='commandant'")
 
 
+def ensure_whatsapp_schema():
+    """Создать таблицы whatsapp_config / whatsapp_queue и добавить WA-поля в user."""
+    inspector = sa_inspect(db.engine)
+    if not inspector.has_table("whatsapp_config") or not inspector.has_table("whatsapp_queue"):
+        db.create_all()
+    with db.engine.connect() as conn:
+        user_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(user)")}
+        if "whatsapp_connected" not in user_cols:
+            conn.exec_driver_sql("ALTER TABLE user ADD COLUMN whatsapp_connected BOOLEAN NOT NULL DEFAULT 0")
+        if "whatsapp_connected_at" not in user_cols:
+            conn.exec_driver_sql("ALTER TABLE user ADD COLUMN whatsapp_connected_at DATETIME")
+        if "whatsapp_jid" not in user_cols:
+            conn.exec_driver_sql("ALTER TABLE user ADD COLUMN whatsapp_jid VARCHAR(64)")
+
+
 _did_role_migration = False
 _did_expense_schema = False
 _did_money_migration = False
@@ -655,6 +705,7 @@ _did_default_superadmin_seed = False
 _did_apartment_schema_migration = False
 _did_tariff_scope_schema = False
 _did_building_schema = False
+_did_whatsapp_schema = False
 
 
 def ensure_default_superadmin_seed():
@@ -686,6 +737,7 @@ def run_startup_migrations():
     ensure_balance_schema()
     ensure_tariff_scope_schema()
     ensure_building_schema()
+    ensure_whatsapp_schema()
     ensure_user_role_migration()
     ensure_default_superadmin_seed()
 
@@ -699,6 +751,7 @@ def _run_role_migration_once():
     global _did_apartment_schema_migration
     global _did_tariff_scope_schema
     global _did_building_schema
+    global _did_whatsapp_schema
     # Expense sütunları əvvəl (NUMERIC rebuild üçün category mövcud olsun).
     if not _did_expense_schema:
         try:
@@ -732,6 +785,12 @@ def _run_role_migration_once():
             ensure_building_schema()
         finally:
             _did_building_schema = True
+    if not _did_whatsapp_schema:
+        try:
+            ensure_whatsapp_schema()
+        finally:
+            _did_whatsapp_schema = True
+    start_whatsapp_worker()
     if _did_default_superadmin_seed:
         return
     try:
@@ -931,11 +990,183 @@ def build_receipt_email(payment, cfg):
     return subject, plain_body, html_body
 
 
+# ---------------------------------------------------------------------------
+# WhatsApp (Evolution API) integration
+# ---------------------------------------------------------------------------
+
+def get_whatsapp_config() -> "WhatsappConfig":
+    """Singleton-накопитель настроек Evolution API."""
+    cfg = WhatsappConfig.query.first()
+    if not cfg:
+        cfg = WhatsappConfig(webhook_secret=secrets.token_urlsafe(24))
+        db.session.add(cfg)
+        db.session.commit()
+    elif not cfg.webhook_secret:
+        cfg.webhook_secret = secrets.token_urlsafe(24)
+        db.session.commit()
+    return cfg
+
+
+def _wa_digits(phone: str) -> Optional[str]:
+    """Нормализация телефона к виду '994XXXXXXXXX' (без '+')."""
+    if not phone:
+        return None
+    s = re.sub(r"\D+", "", str(phone))
+    if len(s) < 8:
+        return None
+    return s
+
+
+def wa_send_text(phone: str, text: str) -> tuple[bool, str]:
+    """Прямой вызов Evolution API: POST {api_url}/message/sendText/{instance}."""
+    cfg = get_whatsapp_config()
+    if not cfg.enabled:
+        return False, "WhatsApp inteqrasiyası deaktiv edilib."
+    if not (cfg.api_url and cfg.api_key and cfg.instance):
+        return False, "WhatsApp ayarları tam deyil (URL/API key/instance)."
+    number = _wa_digits(phone)
+    if not number:
+        return False, "Telefon nömrəsi yanlışdır."
+    url = f"{cfg.api_url.rstrip('/')}/message/sendText/{cfg.instance}"
+    headers = {"apikey": cfg.api_key, "Content-Type": "application/json"}
+    payload = {"number": number, "text": text}
+    try:
+        r = requests.post(url, headers=headers, json=payload, timeout=20)
+        if 200 <= r.status_code < 300:
+            return True, ""
+        return False, f"HTTP {r.status_code}: {r.text[:200]}"
+    except requests.RequestException as exc:
+        return False, f"Şəbəkə xətası: {exc}"
+
+
+def build_whatsapp_invoice_text(invoice, resident, smtp_cfg) -> str:
+    """Короткий текст + ссылка на печатную версию инвойса."""
+    system_name = (smtp_cfg.system_name or "").strip() or "eMTK"
+    debt_raw = round(float(invoice.amount) - float(invoice.paid_amount), 2)
+    debt = max(0.0, debt_raw)
+    credit = max(0.0, -debt_raw)
+    try:
+        link = url_for("print_invoice", invoice_id=invoice.id, _external=True)
+    except RuntimeError:
+        link = ""
+    lines = [
+        f"*{system_name}* — Hesab-faktura {invoice.period}",
+        f"Sakin: {resident.full_name}",
+        f"Mənzil: {invoice.apartment.number}",
+        "",
+        f"Hesablanıb: {float(invoice.amount):.2f} AZN",
+        f"Ödənilib: {float(invoice.paid_amount):.2f} AZN",
+        f"Borc: {debt:.2f} AZN",
+    ]
+    if credit > 0:
+        lines.append(f"Kredit: {credit:.2f} AZN")
+    if link:
+        lines += ["", f"Çap versiyası: {link}"]
+    if smtp_cfg.contact_phone:
+        lines += ["", f"Əlaqə: {smtp_cfg.contact_phone}"]
+    return "\n".join(lines)
+
+
+def wa_queue_enqueue(phone: str, text: str, *, invoice_id: Optional[int] = None, user_id: Optional[int] = None) -> Optional["WhatsappQueue"]:
+    """Ставит сообщение в очередь на отправку."""
+    digits = _wa_digits(phone)
+    if not digits:
+        return None
+    item = WhatsappQueue(
+        recipient_phone=digits,
+        text=text,
+        invoice_id=invoice_id,
+        user_id=user_id,
+        status="pending",
+    )
+    db.session.add(item)
+    db.session.commit()
+    return item
+
+
+def wa_queue_drain_once() -> int:
+    """
+    Отправляет не более (bulk_limit - отправленных за последнее окно) сообщений.
+    Возвращает количество фактически отправленных (успех+ошибка).
+    """
+    cfg = get_whatsapp_config()
+    if not cfg.enabled:
+        return 0
+
+    window_start = datetime.now(timezone.utc) - timedelta(seconds=int(cfg.bulk_window_sec or 300))
+    sent_in_window = (
+        WhatsappQueue.query
+        .filter(WhatsappQueue.status == "sent", WhatsappQueue.sent_at >= window_start)
+        .count()
+    )
+    budget = max(0, int(cfg.bulk_limit or 10) - sent_in_window)
+    if budget <= 0:
+        return 0
+
+    pending = (
+        WhatsappQueue.query
+        .filter_by(status="pending")
+        .order_by(WhatsappQueue.id.asc())
+        .limit(budget)
+        .all()
+    )
+    if not pending:
+        return 0
+
+    processed = 0
+    for item in pending:
+        ok, err = wa_send_text(item.recipient_phone, item.text)
+        item.status = "sent" if ok else "failed"
+        item.error = None if ok else (err or "")[:500]
+        item.sent_at = datetime.now(timezone.utc)
+        db.session.commit()
+        processed += 1
+    return processed
+
+
+def _wa_worker_loop():
+    """Фоновый поток: раз в 30 сек вытягивает очередь в пределах лимита."""
+    while True:
+        try:
+            with app.app_context():
+                wa_queue_drain_once()
+        except Exception:
+            # Не валим поток из-за транзиентных ошибок.
+            pass
+        _time.sleep(30)
+
+
+def start_whatsapp_worker():
+    if app.config.get("WA_WORKER_STARTED"):
+        return
+    app.config["WA_WORKER_STARTED"] = True
+    t = threading.Thread(target=_wa_worker_loop, name="wa-queue-worker", daemon=True)
+    t.start()
+
+
 @app.context_processor
 def inject_system_config():
     cfg = get_smtp_config()
     system_name = (cfg.system_name or "").strip() or "eMTK"
     return {"system_name": system_name}
+
+
+@app.context_processor
+def inject_whatsapp_config():
+    try:
+        cfg = get_whatsapp_config()
+    except Exception:
+        return {"wa_enabled": False, "wa_service_number": None, "current_user_obj": None}
+    user = None
+    try:
+        user = current_user()
+    except Exception:
+        user = None
+    return {
+        "wa_enabled": bool(cfg.enabled and cfg.api_url and cfg.api_key and cfg.instance),
+        "wa_service_number": cfg.service_number,
+        "current_user_obj": user,
+    }
 
 
 def payment_status_label(status: str) -> str:
@@ -2921,6 +3152,72 @@ def send_invoice_email(invoice_id):
     return redirect(url_for("admin_invoices"))
 
 
+@app.route("/admin/invoices/whatsapp/<int:invoice_id>", methods=["POST"])
+@login_required
+@role_required("komendant", "superadmin")
+def send_invoice_whatsapp(invoice_id):
+    invoice = Invoice.query.get_or_404(invoice_id)
+    resident = invoice.apartment.owner
+    if not resident or not resident.phone:
+        flash("Sakinin telefon nömrəsi yoxdur.", "warning")
+        return redirect(url_for("admin_invoices"))
+    smtp_cfg = get_smtp_config()
+    text = build_whatsapp_invoice_text(invoice, resident, smtp_cfg)
+    ok, err = wa_send_text(resident.phone, text)
+    if ok:
+        audit(f"Hesab-faktura #{invoice.id} WhatsApp ilə göndərildi ({resident.phone})")
+        flash("Hesab-faktura WhatsApp ilə göndərildi.", "success")
+    else:
+        flash(f"WhatsApp göndərilmədi: {err}", "danger")
+    return redirect(url_for("admin_invoices", period=invoice.period))
+
+
+@app.route("/admin/invoices/whatsapp/bulk", methods=["POST"])
+@login_required
+@role_required("komendant", "superadmin")
+def send_invoices_whatsapp_bulk():
+    wa_cfg = get_whatsapp_config()
+    if not wa_cfg.enabled:
+        flash("WhatsApp inteqrasiyası deaktiv edilib.", "warning")
+        return redirect(url_for("admin_invoices"))
+
+    period = (request.form.get("period") or "").strip()
+    building_id = request.form.get("building_id")
+    try:
+        building_id = int(building_id) if building_id else None
+    except ValueError:
+        building_id = None
+
+    q = Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
+    if period:
+        q = q.filter(Invoice.period == period)
+    if building_id:
+        q = q.filter(Apartment.building_id == building_id)
+    invoices = q.all()
+
+    smtp_cfg = get_smtp_config()
+    queued = 0
+    skipped = 0
+    for inv in invoices:
+        resident = inv.apartment.owner
+        if not resident or not resident.phone:
+            skipped += 1
+            continue
+        text = build_whatsapp_invoice_text(inv, resident, smtp_cfg)
+        if wa_queue_enqueue(resident.phone, text, invoice_id=inv.id, user_id=resident.id):
+            queued += 1
+        else:
+            skipped += 1
+
+    audit(f"Kütləvi WhatsApp: {queued} mesaj növbəyə əlavə edildi (period={period or 'hamısı'})")
+    flash(
+        f"Növbəyə əlavə edildi: {queued}. Telefonu olmayanlar: {skipped}. "
+        f"Limit: {wa_cfg.bulk_limit} mesaj / {wa_cfg.bulk_window_sec // 60} dəq.",
+        "success",
+    )
+    return redirect(url_for("admin_invoices", period=period, building_id=building_id or ""))
+
+
 @app.route("/admin/invoices/print/<int:invoice_id>")
 @login_required
 @role_required("komendant", "superadmin")
@@ -2971,6 +3268,34 @@ def admin_settings():
                 flash("Test email ugurla gonderildi.", "success")
             else:
                 flash("Test email gonderilmedi. SMTP ayarlarini yoxlayin.", "danger")
+        elif form_type == "save_whatsapp":
+            wa_cfg = get_whatsapp_config()
+            wa_cfg.enabled = request.form.get("wa_enabled") == "on"
+            wa_cfg.api_url = request.form.get("wa_api_url", "").strip() or None
+            new_key = request.form.get("wa_api_key", "").strip()
+            if new_key:
+                wa_cfg.api_key = new_key
+            wa_cfg.instance = request.form.get("wa_instance", "").strip() or None
+            wa_cfg.service_number = request.form.get("wa_service_number", "").strip() or None
+            try:
+                wa_cfg.bulk_limit = max(1, int(request.form.get("wa_bulk_limit", "10") or "10"))
+            except ValueError:
+                wa_cfg.bulk_limit = 10
+            try:
+                wa_cfg.bulk_window_sec = max(30, int(request.form.get("wa_bulk_window_sec", "300") or "300"))
+            except ValueError:
+                wa_cfg.bulk_window_sec = 300
+            db.session.commit()
+            audit("WhatsApp ayarlari yenilendi")
+            flash("WhatsApp ayarlari saxlanildi.", "success")
+        elif form_type == "test_whatsapp":
+            to_phone = request.form.get("test_phone", "").strip()
+            sysname = (cfg.system_name or "").strip() or "eMTK"
+            ok, err = wa_send_text(to_phone, f"{sysname} — WhatsApp test mesajı.")
+            if ok:
+                flash("Test WhatsApp mesajı göndərildi.", "success")
+            else:
+                flash(f"WhatsApp test uğursuz: {err}", "danger")
         elif form_type == "add_apartment_preset":
             name = (request.form.get("name", "") or "").strip()
             rooms_raw = (request.form.get("rooms", "") or "").strip()
@@ -3069,6 +3394,7 @@ def admin_settings():
     return render_template(
         "admin_settings.html",
         cfg=cfg,
+        wa_cfg=get_whatsapp_config(),
         apartment_presets=apartment_presets,
         buildings=buildings,
         database_backup_supported=database_backup_supported,
@@ -3374,6 +3700,94 @@ def init_data():
         db.session.add(Announcement(title="Отключение воды", text="Во вторник с 10:00 до 14:00 запланированы работы."))
         db.session.commit()
     return "Initialized. Open /login"
+
+
+@app.route("/resident/whatsapp/connect")
+@login_required
+def resident_whatsapp_connect():
+    """Редирект резидента на wa.me/<service_number>. Флаг подключения ставится webhook'ом."""
+    wa_cfg = get_whatsapp_config()
+    number = _wa_digits(wa_cfg.service_number) if wa_cfg.service_number else None
+    if not number:
+        flash("WhatsApp servis nömrəsi təyin edilməyib. Administrator ilə əlaqə saxlayın.", "warning")
+        return redirect(url_for("dashboard"))
+    user = current_user()
+    # Текст помогает сопоставить webhook с юзером по номеру + токену.
+    text = f"Connect me to notifications. ID:{user.id}" if user else "Connect me to notifications."
+    from urllib.parse import quote
+    return redirect(f"https://wa.me/{number}?text={quote(text)}")
+
+
+@csrf.exempt
+@app.route("/whatsapp/webhook", methods=["POST"])
+def whatsapp_webhook():
+    """
+    Evolution API webhook. Секрет передаётся в query (?secret=...) или заголовке X-Webhook-Secret.
+    Событие messages.upsert используется для установки флага whatsapp_connected у резидента.
+    """
+    wa_cfg = get_whatsapp_config()
+    expected = (wa_cfg.webhook_secret or "").strip()
+    provided = request.args.get("secret") or request.headers.get("X-Webhook-Secret") or ""
+    if not expected or provided != expected:
+        return ("forbidden", 403)
+
+    try:
+        payload = request.get_json(force=True, silent=True) or {}
+    except Exception:
+        payload = {}
+
+    # Evolution API обычно присылает {"event": "messages.upsert", "data": {...}}
+    event = (payload.get("event") or "").lower()
+    data = payload.get("data") or {}
+
+    # Массовые события (batch)
+    messages = []
+    if isinstance(data, list):
+        messages = data
+    elif isinstance(data.get("messages"), list):
+        messages = data["messages"]
+    else:
+        messages = [data]
+
+    updated = 0
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        # Реагируем только на входящие: key.fromMe == False
+        key = m.get("key") or {}
+        if key.get("fromMe"):
+            continue
+        jid = key.get("remoteJid") or m.get("remoteJid") or ""
+        if not jid:
+            continue
+        digits = re.sub(r"\D+", "", jid.split("@", 1)[0])
+        if not digits:
+            continue
+        # Сопоставляем пользователя по телефону (+994…) с нормализацией.
+        candidates = User.query.filter(User.phone.isnot(None)).all()
+        user = None
+        for u in candidates:
+            u_digits = re.sub(r"\D+", "", u.phone or "")
+            if u_digits and u_digits == digits:
+                user = u
+                break
+        if not user:
+            continue
+        user.whatsapp_connected = True
+        user.whatsapp_jid = jid[:64]
+        user.whatsapp_connected_at = datetime.now(timezone.utc)
+        updated += 1
+
+    if updated:
+        db.session.commit()
+
+    # Попутно «пнуть» очередь: webhook обычно редко приходит, но пусть не простаивает.
+    try:
+        wa_queue_drain_once()
+    except Exception:
+        pass
+
+    return ("ok", 200)
 
 
 if __name__ == "__main__":
