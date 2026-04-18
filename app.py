@@ -3340,6 +3340,66 @@ def send_invoices_whatsapp_bulk():
     return redirect(url_for("admin_invoices", period=period, building_id=building_id or ""))
 
 
+@app.route("/admin/invoices/email/bulk", methods=["POST"])
+@login_required
+@role_required("komendant", "superadmin")
+def send_invoices_email_bulk():
+    period = (request.form.get("period") or "").strip()
+    building_id_raw = request.form.get("building_id")
+    try:
+        building_id = int(building_id_raw) if building_id_raw else None
+    except ValueError:
+        building_id = None
+
+    smtp_cfg = get_smtp_config()
+    if not smtp_cfg.host or not smtp_cfg.sender_email:
+        flash("SMTP ayarları tam deyil (host və ya göndərən email). Admin parametrlərini yoxlayın.", "danger")
+        return redirect(url_for("admin_invoices", period=period, building_id=building_id or ""))
+
+    q = Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
+    if period:
+        q = q.filter(Invoice.period == period)
+    if building_id:
+        q = q.filter(Apartment.building_id == building_id)
+    invoices = q.all()
+
+    sent = 0
+    failed = 0
+    skipped = 0
+    for inv in invoices:
+        resident = inv.apartment.owner
+        if not resident or not resident.email:
+            skipped += 1
+            continue
+        subject, body, html_body = build_invoice_email(inv, resident, smtp_cfg)
+        if send_email(subject, body, [resident.email], html_body=html_body):
+            sent += 1
+        else:
+            failed += 1
+
+    audit(
+        f"Kütləvi email (hesab-faktura): göndərildi={sent}, uğursuz={failed}, email yox={skipped} "
+        f"(period={period or 'hamısı'})"
+    )
+    if failed and not sent:
+        flash(
+            f"Email göndərilmədi (SMTP xətası və ya bütün cəhdlər uğursuz). "
+            f"Emaili olmayanlar: {skipped}.",
+            "danger",
+        )
+    elif failed:
+        flash(
+            f"Göndərildi: {sent}. Uğursuz: {failed}. Email ünvanı olmayanlar: {skipped}.",
+            "warning",
+        )
+    else:
+        flash(
+            f"Hesab-faktura email ilə göndərildi: {sent}. Email ünvanı olmayanlar: {skipped}.",
+            "success",
+        )
+    return redirect(url_for("admin_invoices", period=period, building_id=building_id or ""))
+
+
 @app.route("/admin/invoices/print/<int:invoice_id>")
 @login_required
 @role_required("komendant", "superadmin")

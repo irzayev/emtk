@@ -57,6 +57,15 @@
         <div class="d-flex justify-content-end gap-2 mb-2">
             <a class="btn btn-outline-success btn-sm" href="{{ url_for('export_invoices', period=selected_period, building_id=building_id) }}">Excel</a>
             <a class="btn btn-outline-primary btn-sm" target="_blank" href="{{ url_for('print_invoices', period=selected_period, building_id=building_id) }}">Çap</a>
+            <form method="post" action="{{ url_for('send_invoices_email_bulk') }}"
+                  onsubmit="return confirm('Seçilmiş filtrə uyğun bütün sakinlərə hesab-faktura email ilə göndərmək?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="period" value="{{ selected_period }}">
+                <input type="hidden" name="building_id" value="{{ building_id or '' }}">
+                <button class="btn btn-primary btn-sm" type="submit" title="SMTP ayarlarından istifadə olunur">
+                    Hamısına Email
+                </button>
+            </form>
             {% if wa_enabled %}
             <form method="post" action="{{ url_for('send_invoices_whatsapp_bulk') }}"
                   onsubmit="return confirm('Bütün sakinlərə WhatsApp göndərmək? (limit növbəyə tətbiq olunur)');">
