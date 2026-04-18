@@ -237,7 +237,12 @@
             </div>
         </form>
         <hr class="my-4">
-        <h6 class="mb-3">Test WhatsApp mesajı</h6>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0">Test WhatsApp mesajı</h6>
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_whatsapp_logs') }}">
+                Webhook jurnalı
+            </a>
+        </div>
         <form method="post" class="row g-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="form_type" value="test_whatsapp">

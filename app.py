@@ -242,6 +242,20 @@ class WhatsappQueue(db.Model):
     sent_at = db.Column(db.DateTime, nullable=True)
 
 
+class WhatsappWebhookLog(db.Model):
+    """Диагностический журнал входящих webhook-вызовов от Evolution API."""
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    remote_ip = db.Column(db.String(64), nullable=True)
+    status_code = db.Column(db.Integer, nullable=False, default=200)
+    event = db.Column(db.String(64), nullable=True)
+    remote_jid = db.Column(db.String(128), nullable=True)
+    digits = db.Column(db.String(32), nullable=True)
+    matched_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    note = db.Column(db.String(255), nullable=True)
+    raw_body = db.Column(db.Text, nullable=True)
+
+
 class WorkLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
@@ -684,9 +698,13 @@ def ensure_user_role_migration():
 
 
 def ensure_whatsapp_schema():
-    """Создать таблицы whatsapp_config / whatsapp_queue и добавить WA-поля в user."""
+    """Создать таблицы whatsapp_config / whatsapp_queue / whatsapp_webhook_log и добавить WA-поля в user."""
     inspector = sa_inspect(db.engine)
-    if not inspector.has_table("whatsapp_config") or not inspector.has_table("whatsapp_queue"):
+    if (
+        not inspector.has_table("whatsapp_config")
+        or not inspector.has_table("whatsapp_queue")
+        or not inspector.has_table("whatsapp_webhook_log")
+    ):
         db.create_all()
     with db.engine.connect() as conn:
         user_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(user)")}
@@ -3718,17 +3736,93 @@ def resident_whatsapp_connect():
     return redirect(f"https://wa.me/{number}?text={quote(text)}")
 
 
+def _wa_log_webhook(*, status_code: int, event: Optional[str], remote_jid: Optional[str],
+                    digits: Optional[str], matched_user_id: Optional[int], note: str,
+                    raw_body: str) -> None:
+    """Пишет запись в диагностический журнал и чистит старые (>200)."""
+    try:
+        entry = WhatsappWebhookLog(
+            remote_ip=(request.headers.get("X-Forwarded-For") or request.remote_addr or "")[:64],
+            status_code=status_code,
+            event=(event or "")[:64],
+            remote_jid=(remote_jid or "")[:128],
+            digits=(digits or "")[:32],
+            matched_user_id=matched_user_id,
+            note=(note or "")[:255],
+            raw_body=(raw_body or "")[:8000],
+        )
+        db.session.add(entry)
+        db.session.commit()
+        # Ротация: храним максимум 200 последних записей.
+        total = WhatsappWebhookLog.query.count()
+        if total > 200:
+            old_ids = [
+                row.id for row in
+                WhatsappWebhookLog.query.order_by(WhatsappWebhookLog.id.asc()).limit(total - 200).all()
+            ]
+            if old_ids:
+                WhatsappWebhookLog.query.filter(WhatsappWebhookLog.id.in_(old_ids)).delete(synchronize_session=False)
+                db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+def _wa_extract_messages(payload: dict) -> list:
+    """Вытягивает список сообщений из пейлоада Evolution API в разных возможных формах."""
+    if not isinstance(payload, dict):
+        return []
+    data = payload.get("data")
+    if data is None:
+        # Иногда корневой объект — это и есть message.
+        return [payload] if payload.get("key") else []
+    if isinstance(data, list):
+        return [m for m in data if isinstance(m, dict)]
+    if isinstance(data, dict):
+        if isinstance(data.get("messages"), list):
+            return [m for m in data["messages"] if isinstance(m, dict)]
+        return [data]
+    return []
+
+
+def _wa_is_from_me(key: dict) -> bool:
+    """fromMe может прийти как bool/str/int."""
+    v = key.get("fromMe")
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "yes")
+    return False
+
+
 @csrf.exempt
 @app.route("/whatsapp/webhook", methods=["POST"])
-def whatsapp_webhook():
+@app.route("/whatsapp/webhook/<path:subpath>", methods=["POST"])
+def whatsapp_webhook(subpath: Optional[str] = None):
     """
-    Evolution API webhook. Секрет передаётся в query (?secret=...) или заголовке X-Webhook-Secret.
-    Событие messages.upsert используется для установки флага whatsapp_connected у резидента.
+    Webhook от Evolution API. Принимает как единый URL (webhookByEvents=false),
+    так и URL с суффиксами (/messages-upsert и т.п., если включено webhookByEvents=true).
+
+    Секрет передаётся в query (?secret=...) или заголовке X-Webhook-Secret / apikey.
     """
+    raw_body = request.get_data(as_text=True) or ""
+
     wa_cfg = get_whatsapp_config()
     expected = (wa_cfg.webhook_secret or "").strip()
-    provided = request.args.get("secret") or request.headers.get("X-Webhook-Secret") or ""
+    provided = (
+        request.args.get("secret")
+        or request.headers.get("X-Webhook-Secret")
+        or request.headers.get("Apikey")
+        or request.headers.get("apikey")
+        or ""
+    )
     if not expected or provided != expected:
+        _wa_log_webhook(
+            status_code=403, event=None, remote_jid=None, digits=None,
+            matched_user_id=None, note="forbidden: secret mismatch",
+            raw_body=raw_body,
+        )
         return ("forbidden", 403)
 
     try:
@@ -3736,58 +3830,112 @@ def whatsapp_webhook():
     except Exception:
         payload = {}
 
-    # Evolution API обычно присылает {"event": "messages.upsert", "data": {...}}
-    event = (payload.get("event") or "").lower()
-    data = payload.get("data") or {}
+    event = (payload.get("event") or payload.get("type") or "").lower()
+    # Если включён webhookByEvents=true, Evolution добавляет суффикс (напр. /messages-upsert)
+    # и событие дублируется в URL — учитываем и это.
+    if subpath and not event:
+        event = subpath.lower().replace("-", ".").replace("_", ".")
 
-    # Массовые события (batch)
-    messages = []
-    if isinstance(data, list):
-        messages = data
-    elif isinstance(data.get("messages"), list):
-        messages = data["messages"]
-    else:
-        messages = [data]
+    messages = _wa_extract_messages(payload)
+
+    if not messages:
+        _wa_log_webhook(
+            status_code=200, event=event or None, remote_jid=None, digits=None,
+            matched_user_id=None, note=f"received ok, no messages in payload (event={event or 'n/a'})",
+            raw_body=raw_body,
+        )
+        try:
+            wa_queue_drain_once()
+        except Exception:
+            pass
+        return ("ok", 200)
 
     updated = 0
     for m in messages:
-        if not isinstance(m, dict):
-            continue
-        # Реагируем только на входящие: key.fromMe == False
         key = m.get("key") or {}
-        if key.get("fromMe"):
-            continue
+        from_me = _wa_is_from_me(key)
         jid = key.get("remoteJid") or m.get("remoteJid") or ""
-        if not jid:
+        # sender в группах может быть в participant
+        participant = key.get("participant") or m.get("participant") or ""
+        effective_jid = participant or jid  # для личных чатов participant пуст — берём remoteJid
+
+        if from_me:
+            _wa_log_webhook(
+                status_code=200, event=event or None, remote_jid=jid, digits=None,
+                matched_user_id=None, note="skipped: fromMe=true",
+                raw_body=raw_body,
+            )
             continue
-        digits = re.sub(r"\D+", "", jid.split("@", 1)[0])
+        if not effective_jid:
+            _wa_log_webhook(
+                status_code=200, event=event or None, remote_jid=None, digits=None,
+                matched_user_id=None, note="skipped: no remoteJid",
+                raw_body=raw_body,
+            )
+            continue
+
+        jid_left = effective_jid.split("@", 1)[0]
+        jid_suffix = effective_jid.split("@", 1)[1] if "@" in effective_jid else ""
+        digits = re.sub(r"\D+", "", jid_left)
+
+        # @lid — внутренний идентификатор, не телефон. Матч всё равно попробуем, но в note отметим.
+        lid_warning = "; jid=@lid (внутренний ID, не телефон)" if jid_suffix.lower() == "lid" else ""
+
         if not digits:
+            _wa_log_webhook(
+                status_code=200, event=event or None, remote_jid=effective_jid,
+                digits=None, matched_user_id=None,
+                note=f"skipped: cannot extract digits{lid_warning}",
+                raw_body=raw_body,
+            )
             continue
-        # Сопоставляем пользователя по телефону (+994…) с нормализацией.
+
         candidates = User.query.filter(User.phone.isnot(None)).all()
         user = None
         for u in candidates:
             u_digits = re.sub(r"\D+", "", u.phone or "")
-            if u_digits and u_digits == digits:
+            if u_digits and (u_digits == digits or u_digits.endswith(digits) or digits.endswith(u_digits)):
                 user = u
                 break
+
         if not user:
+            _wa_log_webhook(
+                status_code=200, event=event or None, remote_jid=effective_jid,
+                digits=digits, matched_user_id=None,
+                note=f"no user match{lid_warning}",
+                raw_body=raw_body,
+            )
             continue
+
         user.whatsapp_connected = True
-        user.whatsapp_jid = jid[:64]
+        user.whatsapp_jid = effective_jid[:64]
         user.whatsapp_connected_at = datetime.now(timezone.utc)
         updated += 1
+        _wa_log_webhook(
+            status_code=200, event=event or None, remote_jid=effective_jid,
+            digits=digits, matched_user_id=user.id,
+            note=f"matched user #{user.id} ({user.full_name}){lid_warning}",
+            raw_body=raw_body,
+        )
 
     if updated:
         db.session.commit()
 
-    # Попутно «пнуть» очередь: webhook обычно редко приходит, но пусть не простаивает.
     try:
         wa_queue_drain_once()
     except Exception:
         pass
 
     return ("ok", 200)
+
+
+@app.route("/admin/whatsapp/logs")
+@login_required
+@role_required("superadmin", "komendant")
+def admin_whatsapp_logs():
+    """Админский просмотр последних webhook-событий."""
+    logs = WhatsappWebhookLog.query.order_by(WhatsappWebhookLog.id.desc()).limit(100).all()
+    return render_template("admin_whatsapp_logs.html", logs=logs)
 
 
 if __name__ == "__main__":
