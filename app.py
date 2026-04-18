@@ -227,6 +227,7 @@ class SmtpConfig(db.Model):
     house_address = db.Column(db.String(255), nullable=True)
     commandant_name = db.Column(db.String(120), nullable=True)
     contact_phone = db.Column(db.String(50), nullable=True)
+    portal_url = db.Column(db.String(255), nullable=True)
 
 
 class WhatsappConfig(db.Model):
@@ -702,6 +703,8 @@ def ensure_system_schema():
             conn.exec_driver_sql("ALTER TABLE smtp_config ADD COLUMN commandant_name VARCHAR(120)")
         if "contact_phone" not in columns:
             conn.exec_driver_sql("ALTER TABLE smtp_config ADD COLUMN contact_phone VARCHAR(50)")
+        if "portal_url" not in columns:
+            conn.exec_driver_sql("ALTER TABLE smtp_config ADD COLUMN portal_url VARCHAR(255)")
 
 
 def ensure_user_role_migration():
@@ -1074,9 +1077,15 @@ def build_whatsapp_invoice_text(invoice, resident, smtp_cfg) -> str:
     """Короткий текст + ссылка на печатную версию инвойса (резидентская панель)."""
     system_name = (smtp_cfg.system_name or "").strip() or "eMTK"
     balance = round(float(invoice.amount) - float(invoice.paid_amount), 2)
+    portal_url = (smtp_cfg.portal_url or "").strip().rstrip("/")
     # Резидентская ссылка (требует логина) — админский /admin/... сакинам недоступен.
+    # Если задан portal_url в настройках — используем его как базу, иначе SERVER_NAME из запроса.
     try:
-        link = url_for("resident_invoice_print", invoice_id=invoice.id, _external=True)
+        if portal_url:
+            path = url_for("resident_invoice_print", invoice_id=invoice.id)
+            link = f"{portal_url}{path}"
+        else:
+            link = url_for("resident_invoice_print", invoice_id=invoice.id, _external=True)
     except RuntimeError:
         link = ""
 
@@ -1093,6 +1102,9 @@ def build_whatsapp_invoice_text(invoice, resident, smtp_cfg) -> str:
     ]
     if link:
         lines += ["", f"Çap versiyası: {link}"]
+
+    if portal_url:
+        lines += ["", f"Portal: {portal_url}"]
 
     contact_phone = (smtp_cfg.contact_phone or "").strip()
     commandant_name = (smtp_cfg.commandant_name or "").strip()
@@ -3328,6 +3340,12 @@ def admin_settings():
             cfg.house_address = request.form.get("house_address", "").strip() or None
             cfg.commandant_name = request.form.get("commandant_name", "").strip() or None
             cfg.contact_phone = request.form.get("contact_phone", "").strip() or None
+            # Portal URL меняет только суперадмин.
+            if session.get("role") == "superadmin":
+                portal_raw = (request.form.get("portal_url", "") or "").strip()
+                if portal_raw and not portal_raw.lower().startswith(("http://", "https://")):
+                    portal_raw = "https://" + portal_raw
+                cfg.portal_url = portal_raw.rstrip("/") or None
             db.session.commit()
             audit("Sistem ayarlari yenilendi")
             flash("Sistem ayarlari saxlanildi.", "success")

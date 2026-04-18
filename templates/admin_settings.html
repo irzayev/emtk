@@ -27,6 +27,20 @@
                 <label class="form-label">Elaqe nomresi</label>
                 <input class="form-control" name="contact_phone" value="{{ cfg.contact_phone or '' }}" placeholder="+994...">
             </div>
+            <div class="col-md-12">
+                <label class="form-label">
+                    Portal URL
+                    {% if session.get('role') != 'superadmin' %}
+                        <span class="badge bg-light text-muted border ms-1">yalnız superadmin</span>
+                    {% endif %}
+                </label>
+                <input class="form-control"
+                       name="portal_url"
+                       value="{{ cfg.portal_url or '' }}"
+                       placeholder="https://portal.example.com"
+                       {% if session.get('role') != 'superadmin' %}readonly{% endif %}>
+                <small class="text-muted">Bu URL WhatsApp/email mesajlarında və xarici keçidlərin yaradılmasında baza kimi istifadə olunur.</small>
+            </div>
             <div class="col-12">
                 <button class="btn btn-primary">Yadda saxla</button>
             </div>
