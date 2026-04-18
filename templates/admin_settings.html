@@ -39,7 +39,6 @@
                        value="{{ cfg.portal_url or '' }}"
                        placeholder="https://portal.example.com"
                        {% if session.get('role') != 'superadmin' %}readonly{% endif %}>
-                <small class="text-muted">Bu URL WhatsApp/email mesajlarında və xarici keçidlərin yaradılmasında baza kimi istifadə olunur.</small>
             </div>
             <div class="col-12">
                 <button class="btn btn-primary">Yadda saxla</button>
