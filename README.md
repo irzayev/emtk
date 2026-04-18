@@ -70,7 +70,7 @@ $env:SECRET_KEY="dev-secret"
 $env:FLASK_DEBUG="1"
 $env:SESSION_COOKIE_SECURE="0"
 $env:PREFERRED_URL_SCHEME="http"
-$env:DATABASE_URL="sqlite:///instance/smart_zhk.db"
+$env:DATABASE_URL="sqlite:///instance/emtk.db"
 ```
 
 ## Lokal işə salınma

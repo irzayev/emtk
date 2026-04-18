@@ -47,7 +47,35 @@ import requests
 
 app = Flask(__name__)
 # Persist SQLite DB in /app/instance (volume-mounted in compose).
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:////app/instance/smart_zhk.db")
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:////app/instance/emtk.db")
+
+
+def _migrate_legacy_sqlite_filename(database_uri: str) -> None:
+    """
+    Backward compatibility: previously the SQLite file was named ``smart_zhk.db``.
+    If the configured URI points to a file-based SQLite DB and the new file does
+    not exist yet, but a legacy ``smart_zhk.db`` is present in the same folder,
+    rename it so running deployments keep their data after the rebuild.
+    """
+    if not database_uri.startswith("sqlite:"):
+        return
+    try:
+        # SQLAlchemy URL forms: sqlite:///relative/path.db  or  sqlite:////abs/path.db
+        path_part = database_uri.split("sqlite:", 1)[1].lstrip("/")
+        if not path_part or path_part == ":memory:":
+            return
+        new_path = Path("/" + path_part) if database_uri.startswith("sqlite:////") else Path(path_part)
+        legacy_path = new_path.with_name("smart_zhk.db")
+        if legacy_path.exists() and not new_path.exists():
+            new_path.parent.mkdir(parents=True, exist_ok=True)
+            legacy_path.rename(new_path)
+    except OSError:
+        # Do not crash startup because of a rename issue; SQLAlchemy will surface
+        # a clearer error if the DB is truly unreachable.
+        pass
+
+
+_migrate_legacy_sqlite_filename(app.config["SQLALCHEMY_DATABASE_URI"])
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
 secret_key = os.getenv("SECRET_KEY")
