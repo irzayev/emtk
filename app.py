@@ -3771,9 +3771,8 @@ def resident_whatsapp_connect():
     if not number:
         flash("WhatsApp servis nömrəsi təyin edilməyib. Administrator ilə əlaqə saxlayın.", "warning")
         return redirect(url_for("dashboard"))
-    user = current_user()
-    # Текст помогает сопоставить webhook с юзером по номеру + токену.
-    text = f"Connect me to notifications. ID:{user.id}" if user else "Connect me to notifications."
+    # Префилл текста в wa.me; привязка пользователя в webhook идёт по номеру телефона из JID.
+    text = "Bildirişlərə qoşulmağa icazə verirəm"
     from urllib.parse import quote
     return redirect(f"https://wa.me/{number}?text={quote(text)}")
 
