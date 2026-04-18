@@ -3743,45 +3743,90 @@ def admin_health_calculation_smoke():
 def init_data():
     if os.getenv("ENABLE_INIT_ROUTE", "0") != "1":
         abort(404)
-    db.create_all()
-    ensure_money_numeric_schema()
-    if User.query.count() == 0:
-        superadmin = User(
-            full_name="Admin",
-            phone="+000000",
+    run_startup_migrations()
+
+    def _ensure_user(*, email: str, full_name: str, phone: str, password: str, role: str) -> User:
+        user = User.query.filter_by(email=email).first()
+        if user:
+            return user
+        user = User(
+            full_name=full_name,
+            phone=phone,
+            email=email,
+            password_hash=generate_password_hash(password),
+            role=role,
+        )
+        db.session.add(user)
+        db.session.flush()
+        return user
+
+    # Demo seed should remain idempotent even though bootstrap superadmin
+    # may already be created earlier in the request lifecycle.
+    superadmin = User.query.filter_by(email="admin@emtk.itg.az").first()
+    if not superadmin:
+        superadmin = _ensure_user(
             email="admin@emtk.itg.az",
-            password_hash=generate_password_hash("admin"),
+            full_name="Admin",
+            phone="+994500000000",
+            password="admin",
             role="superadmin",
         )
-        komendant = User(
-            full_name="Komendant",
-            phone="+111111",
-            email="commandant@smartzhk.local",
-            password_hash=generate_password_hash("commandant123"),
-            role="komendant",
-        )
-        resident = User(
-            full_name="Жилец 1",
-            phone="+222222",
-            email="resident@smartzhk.local",
-            password_hash=generate_password_hash("resident123"),
-            role="resident",
-        )
-        db.session.add_all([superadmin, komendant, resident])
-        db.session.commit()
 
-        apt = Apartment(number="A-101", floor=1, area=82.5, owner_user_id=resident.id)
-        db.session.add(apt)
-        db.session.add_all(
-            [
-                Tariff(name="Эксплуатация", type="per_m2", amount=0.8),
-                Tariff(name="Охрана", type="fixed", amount=25),
-            ]
+    komendant = _ensure_user(
+        email="commandant@smartzhk.local",
+        full_name="Komendant",
+        phone="+994501111111",
+        password="commandant123",
+        role="komendant",
+    )
+    resident = _ensure_user(
+        email="resident@smartzhk.local",
+        full_name="Sakin 1",
+        phone="+994502222222",
+        password="resident123",
+        role="resident",
+    )
+
+    building = Building.query.filter_by(name="A Blok").first()
+    if not building:
+        building = Building(name="A Blok", address="Demo bina")
+        db.session.add(building)
+        db.session.flush()
+
+    apartment = Apartment.query.filter_by(number="A-101").first()
+    if not apartment:
+        apartment = Apartment(
+            number="A-101",
+            floor=1,
+            rooms=3,
+            area=82.5,
+            owner_user_id=resident.id,
+            building_id=building.id,
         )
-        db.session.add(WorkLog(title="Ремонт плитки в лобби", description="Заменили поврежденную плитку, зона открыта."))
-        db.session.add(Announcement(title="Отключение воды", text="Во вторник с 10:00 до 14:00 запланированы работы."))
-        db.session.commit()
-    return "Initialized. Open /login"
+        db.session.add(apartment)
+
+    if not Tariff.query.filter_by(name="İstismar").first():
+        db.session.add(Tariff(name="İstismar", type="per_m2", amount=Decimal("0.80")))
+    if not Tariff.query.filter_by(name="Mühafizə").first():
+        db.session.add(Tariff(name="Mühafizə", type="fixed", amount=Decimal("25.00")))
+
+    if not WorkLog.query.filter_by(title="Lobbidə plitə təmiri").first():
+        db.session.add(
+            WorkLog(
+                title="Lobbidə plitə təmiri",
+                description="Zədələnmiş plitələr dəyişdirildi, giriş zonası istifadəyə açıqdır.",
+            )
+        )
+    if not Announcement.query.filter_by(title="Su kəsintisi").first():
+        db.session.add(
+            Announcement(
+                title="Su kəsintisi",
+                text="Çərşənbə axşamı saat 10:00-dan 14:00-dək planlı texniki işlər aparılacaq.",
+            )
+        )
+
+    db.session.commit()
+    return "Demo data initialized. Open /login"
 
 
 @app.route("/resident/whatsapp/connect")
