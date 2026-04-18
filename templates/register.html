@@ -47,18 +47,64 @@
                     const form = document.getElementById('registerForm');
                     const local = document.getElementById('phoneLocal');
                     const hidden = document.getElementById('phoneHidden');
+                    const fullName = form?.querySelector('input[name="full_name"]');
+                    const email = form?.querySelector('input[name="email"]');
                     if (!form || !local || !hidden) return;
-                    // Разрешаем только цифры.
+                    // Yalnız rəqəmlərə icazə veririk.
                     local.addEventListener('input', () => {
                         local.value = local.value.replace(/\D+/g, '').slice(0, 9);
                     });
                     const p = document.getElementById('password');
                     const pc = document.getElementById('password_confirm');
-                    function clearPwdMismatch() {
-                        if (pc) pc.setCustomValidity('');
+                    const validityMessages = new Map([
+                        [fullName, {
+                            valueMissing: 'Ad və soyadı daxil edin.'
+                        }],
+                        [local, {
+                            valueMissing: 'Telefon nömrəsini daxil edin.',
+                            patternMismatch: 'Telefon nömrəsi 9 rəqəmdən ibarət olmalıdır.'
+                        }],
+                        [email, {
+                            valueMissing: 'Email ünvanını daxil edin.',
+                            typeMismatch: 'Düzgün email ünvanı daxil edin.'
+                        }],
+                        [p, {
+                            valueMissing: 'Şifrəni daxil edin.',
+                            tooShort: 'Şifrə ən azı 6 simvol olmalıdır.'
+                        }],
+                        [pc, {
+                            valueMissing: 'Şifrə təsdiqini daxil edin.',
+                            tooShort: 'Şifrə ən azı 6 simvol olmalıdır.'
+                        }]
+                    ]);
+
+                    function applyAzValidityMessage(field) {
+                        if (!field) return;
+                        field.setCustomValidity('');
+                        const messages = validityMessages.get(field);
+                        if (!messages) return;
+                        const validity = field.validity;
+                        if (validity.valueMissing && messages.valueMissing) {
+                            field.setCustomValidity(messages.valueMissing);
+                        } else if (validity.typeMismatch && messages.typeMismatch) {
+                            field.setCustomValidity(messages.typeMismatch);
+                        } else if (validity.patternMismatch && messages.patternMismatch) {
+                            field.setCustomValidity(messages.patternMismatch);
+                        } else if (validity.tooShort && messages.tooShort) {
+                            field.setCustomValidity(messages.tooShort);
+                        }
                     }
-                    if (p) p.addEventListener('input', clearPwdMismatch);
-                    if (pc) pc.addEventListener('input', clearPwdMismatch);
+
+                    function clearFieldValidity(field) {
+                        if (field) field.setCustomValidity('');
+                    }
+
+                    [fullName, local, email, p, pc].forEach((field) => {
+                        if (!field) return;
+                        field.addEventListener('input', () => clearFieldValidity(field));
+                        field.addEventListener('invalid', () => applyAzValidityMessage(field));
+                    });
+
                     form.addEventListener('submit', (e) => {
                         const v = local.value.replace(/\D+/g, '');
                         hidden.value = v ? ('+994' + v) : '';
@@ -67,7 +113,7 @@
                             pc.setCustomValidity('Şifrələr üst-üstə düşmür.');
                             pc.reportValidity();
                         } else if (pc) {
-                            pc.setCustomValidity('');
+                            clearFieldValidity(pc);
                         }
                     });
                 })();
