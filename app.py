@@ -1344,20 +1344,42 @@ def register():
     if request.method == "POST":
         full_name = request.form["full_name"].strip()
         phone = request.form.get("phone", "").strip()
-        email = request.form["email"].strip().lower()
-        password = request.form["password"]
+        email = (request.form.get("email") or "").strip().lower()
+        password = request.form.get("password") or ""
+        password_confirm = request.form.get("password_confirm") or ""
 
-        if phone and not normalize_az_phone(phone):
+        if not email:
+            flash("Email daxil edin.", "danger")
+            return redirect(url_for("register"))
+
+        if not phone:
+            flash("Telefon daxil edin.", "danger")
+            return redirect(url_for("register"))
+
+        phone_norm = normalize_az_phone(phone)
+        if not phone_norm:
             flash("Telefon formatı +994XXXXXXXXX olmalıdır.", "danger")
+            return redirect(url_for("register"))
+
+        if len(password) < 6:
+            flash("Şifrə ən azı 6 simvol olmalıdır.", "danger")
+            return redirect(url_for("register"))
+
+        if password != password_confirm:
+            flash("Şifrələr üst-üstə düşmür.", "danger")
             return redirect(url_for("register"))
 
         if User.query.filter_by(email=email).first():
             flash("Bu email ile qeydiyyatdan kecmis istifadeci var.", "warning")
             return redirect(url_for("register"))
 
+        if User.query.filter_by(phone=phone_norm).first():
+            flash("Bu telefon nömrəsi ilə qeydiyyatdan keçmiş istifadəçi var.", "warning")
+            return redirect(url_for("register"))
+
         resident = User(
             full_name=full_name,
-            phone=phone,
+            phone=phone_norm,
             email=email,
             password_hash=generate_password_hash(password),
             role="resident",

@@ -19,7 +19,7 @@
                         <label class="form-label">Telefon</label>
                         <div class="input-group">
                             <span class="input-group-text">+994</span>
-                            <input class="form-control" type="tel" id="phoneLocal"
+                            <input class="form-control" type="tel" id="phoneLocal" required
                                    inputmode="numeric" autocomplete="tel-national"
                                    maxlength="9" pattern="[0-9]{9}"
                                    placeholder="XXXXXXXXX" title="9 rəqəm">
@@ -31,7 +31,11 @@
                     </div>
                     <div class="col-12">
                         <label class="form-label">Şifrə</label>
-                        <input class="form-control" type="password" name="password" required minlength="6">
+                        <input class="form-control" type="password" name="password" id="password" required minlength="6" autocomplete="new-password">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Şifrəni təsdiqləyin</label>
+                        <input class="form-control" type="password" name="password_confirm" id="password_confirm" required minlength="6" autocomplete="new-password">
                     </div>
                     <div class="col-12 mt-3 d-flex gap-2">
                         <button class="btn btn-primary">Qeydiyyat</button>
@@ -48,9 +52,23 @@
                     local.addEventListener('input', () => {
                         local.value = local.value.replace(/\D+/g, '').slice(0, 9);
                     });
-                    form.addEventListener('submit', () => {
+                    const p = document.getElementById('password');
+                    const pc = document.getElementById('password_confirm');
+                    function clearPwdMismatch() {
+                        if (pc) pc.setCustomValidity('');
+                    }
+                    if (p) p.addEventListener('input', clearPwdMismatch);
+                    if (pc) pc.addEventListener('input', clearPwdMismatch);
+                    form.addEventListener('submit', (e) => {
                         const v = local.value.replace(/\D+/g, '');
                         hidden.value = v ? ('+994' + v) : '';
+                        if (p && pc && p.value !== pc.value) {
+                            e.preventDefault();
+                            pc.setCustomValidity('Şifrələr üst-üstə düşmür.');
+                            pc.reportValidity();
+                        } else if (pc) {
+                            pc.setCustomValidity('');
+                        }
                     });
                 })();
                 </script>
