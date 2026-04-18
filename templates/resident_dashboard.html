@@ -108,11 +108,10 @@
                         <td>{{ i.amount|azn }}</td>
                         <td>{{ i.paid_amount|azn }}</td>
                         <td><span class="badge bg-{{ 'success' if i.status == 'odenilib' else 'warning' }}">{{ i.status }}</span></td>
-                        <td>
+                        <td class="text-nowrap">
+                            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('resident_invoice_print', invoice_id=i.id) }}" target="_blank">Hesab-faktura</a>
                             {% if receipt_by_invoice.get(i.id) %}
                             <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('resident_receipt', payment_id=receipt_by_invoice.get(i.id)) }}">Qəbz</a>
-                            {% else %}
-                            <span class="text-muted small">-</span>
                             {% endif %}
                         </td>
                     </tr>

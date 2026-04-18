@@ -1071,30 +1071,38 @@ def wa_send_text(phone: str, text: str) -> tuple[bool, str]:
 
 
 def build_whatsapp_invoice_text(invoice, resident, smtp_cfg) -> str:
-    """Короткий текст + ссылка на печатную версию инвойса."""
+    """Короткий текст + ссылка на печатную версию инвойса (резидентская панель)."""
     system_name = (smtp_cfg.system_name or "").strip() or "eMTK"
-    debt_raw = round(float(invoice.amount) - float(invoice.paid_amount), 2)
-    debt = max(0.0, debt_raw)
-    credit = max(0.0, -debt_raw)
+    balance = round(float(invoice.amount) - float(invoice.paid_amount), 2)
+    # Резидентская ссылка (требует логина) — админский /admin/... сакинам недоступен.
     try:
-        link = url_for("print_invoice", invoice_id=invoice.id, _external=True)
+        link = url_for("resident_invoice_print", invoice_id=invoice.id, _external=True)
     except RuntimeError:
         link = ""
+
     lines = [
-        f"*{system_name}* — Hesab-faktura {invoice.period}",
+        f"*{system_name}*",
+        f"Hesab-faktura {invoice.period}",
+        "",
         f"Sakin: {resident.full_name}",
         f"Mənzil: {invoice.apartment.number}",
         "",
         f"Hesablanıb: {float(invoice.amount):.2f} AZN",
         f"Ödənilib: {float(invoice.paid_amount):.2f} AZN",
-        f"Borc: {debt:.2f} AZN",
+        f"Balans: {balance:.2f} AZN",
     ]
-    if credit > 0:
-        lines.append(f"Kredit: {credit:.2f} AZN")
     if link:
         lines += ["", f"Çap versiyası: {link}"]
-    if smtp_cfg.contact_phone:
-        lines += ["", f"Əlaqə: {smtp_cfg.contact_phone}"]
+
+    contact_phone = (smtp_cfg.contact_phone or "").strip()
+    commandant_name = (smtp_cfg.commandant_name or "").strip()
+    if contact_phone or commandant_name:
+        lines.append("")
+        if contact_phone:
+            lines.append(f"Əlaqə: {contact_phone}")
+        if commandant_name:
+            lines.append(commandant_name)
+
     return "\n".join(lines)
 
 
@@ -2921,6 +2929,27 @@ def resident_receipt(payment_id):
         flash("Qəbzə giriş mümkün deyil.", "danger")
         return redirect(url_for("dashboard"))
     return render_template("receipt.html", payment=payment)
+
+
+@app.route("/resident/invoice/<int:invoice_id>")
+@login_required
+@role_required("resident")
+def resident_invoice_print(invoice_id):
+    """Печатная версия инвойса для резидента — используется в WA-ссылках."""
+    invoice = Invoice.query.get_or_404(invoice_id)
+    user = current_user()
+    if invoice.apartment.owner_user_id != user.id:
+        flash("Hesab-fakturaya giriş mümkün deyil.", "danger")
+        return redirect(url_for("dashboard"))
+    cfg = get_smtp_config()
+    return render_template(
+        "invoice_print.html",
+        invoice=invoice,
+        resident=invoice.apartment.owner,
+        cfg=cfg,
+        system_name=(cfg.system_name or "").strip() or "eMTK",
+        issue_date=utc_to_local(invoice.created_at),
+    )
 
 
 @app.route("/admin/content", methods=["GET", "POST"])
