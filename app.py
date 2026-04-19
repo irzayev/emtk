@@ -1372,18 +1372,55 @@ def wa_queue_enqueue(phone: str, text: str, *, invoice_id: Optional[int] = None,
 
 WA_BROADCAST_MAX_LEN = 4096
 
+# Унифицированный шаблон персональных WhatsApp-сообщений:
+#   Salam {name},
+#
+#   {body}
+#
+#   Hörmətlə, Komendant
+WA_GREETING_FALLBACK = "hörmətli sakin"
+WA_SIGNATURE = "Hörmətlə, Komendant"
+
+
+def _wa_greeting_name(full_name: Optional[str]) -> str:
+    """Имя для приветствия: full_name или fallback, если пусто."""
+    s = (full_name or "").strip()
+    return s if s else WA_GREETING_FALLBACK
+
+
+def wrap_whatsapp_personal_text(full_name: Optional[str], body: str) -> str:
+    """
+    Оборачивает тело сообщения персональным приветствием и фиксированной
+    подписью «Hörmətlə, Komendant». Итоговая длина не превышает
+    WA_BROADCAST_MAX_LEN — при необходимости укорачивается тело.
+    """
+    name = _wa_greeting_name(full_name)
+    body = (body or "").strip()
+    prefix = f"Salam {name},\n\n"
+    suffix = f"\n\n{WA_SIGNATURE}"
+    max_body = WA_BROADCAST_MAX_LEN - len(prefix) - len(suffix)
+    if max_body < 16:
+        max_body = 16
+    if len(body) > max_body:
+        body = body[: max_body - 1].rstrip() + "…"
+    return f"{prefix}{body}{suffix}"
+
 
 def build_whatsapp_content_broadcast_text(kind: str, title: str, body: str, smtp_cfg) -> str:
-    """Mətn iş jurnalı və ya elan üçün WhatsApp (sadə format). kind: 'elan' | 'is'."""
-    system_name = (smtp_cfg.system_name or "").strip() or "eMTK"
+    """
+    Mesaj gövdəsi (salam və imza olmadan) — elan və ya iş qeydi üçün.
+    Salam/imza sonradan `wrap_whatsapp_personal_text` tərəfindən əlavə olunur.
+    kind: 'elan' | 'is'.
+    """
     label = "Yeni elan" if kind == "elan" else "Yeni iş qeydi"
     t = (title or "").strip()
     b = (body or "").strip()
-    lines = [f"{system_name}", f"{label}", "", t, "", b]
-    text = "\n".join(lines)
-    if len(text) > WA_BROADCAST_MAX_LEN:
-        text = text[: WA_BROADCAST_MAX_LEN - 1] + "…"
-    return text
+    parts: list[str] = [label]
+    if t:
+        parts.append(t)
+    if b:
+        parts.append(b)
+    return "\n\n".join(parts)
 
 
 def wa_broadcast_enqueue(users: list, text: str) -> tuple[int, int]:
@@ -1406,6 +1443,32 @@ def wa_broadcast_enqueue(users: list, text: str) -> tuple[int, int]:
         if digits in seen_digits:
             continue
         seen_digits.add(digits)
+        if wa_queue_enqueue(u.phone, text, user_id=u.id):
+            enq += 1
+    return enq, skipped
+
+
+def wa_broadcast_enqueue_personal(users: list, body: str) -> tuple[int, int]:
+    """
+    Персонализированная рассылка: тело оборачивается шаблоном
+    «Salam {name}, … Hörmətlə, Komendant» индивидуально для каждого получателя.
+    Возвращает (queued, skipped). Дубли по номеру телефона игнорируются
+    (первое вхождение побеждает).
+    """
+    body = (body or "").strip()
+    if not body:
+        return 0, 0
+    seen_digits: set[str] = set()
+    enq, skipped = 0, 0
+    for u in users:
+        digits = _wa_digits(u.phone or "")
+        if not digits:
+            skipped += 1
+            continue
+        if digits in seen_digits:
+            continue
+        seen_digits.add(digits)
+        text = wrap_whatsapp_personal_text(u.full_name, body)
         if wa_queue_enqueue(u.phone, text, user_id=u.id):
             enq += 1
     return enq, skipped
@@ -2208,7 +2271,8 @@ def admin_apartment_owner_whatsapp():
     if len(message) > WA_BROADCAST_MAX_LEN:
         flash(f"Mesaj çox uzundur (maks. {WA_BROADCAST_MAX_LEN} simvol).", "danger")
         return _redirect_admin_apartments()
-    ok, err = wa_send_text(owner.phone, message)
+    text = wrap_whatsapp_personal_text(owner.full_name, message)
+    ok, err = wa_send_text(owner.phone, text)
     if ok:
         audit(f"WhatsApp fərdi mesaj göndərildi: sakin #{owner.id} ({owner.email})")
         flash("Mesaj WhatsApp ilə göndərildi.", "success")
@@ -3710,7 +3774,7 @@ def admin_whatsapp_broadcast():
         users = User.query.filter(User.id.in_(uid_list), User.role == "resident").all()
     else:
         users = User.query.filter_by(role="resident").all()
-    enq, skip = wa_broadcast_enqueue(users, message)
+    enq, skip = wa_broadcast_enqueue_personal(users, message)
     try:
         wa_queue_drain_once()
     except Exception:
@@ -3768,7 +3832,7 @@ def admin_whatsapp_from_item():
         users = User.query.filter(User.id.in_(uid_list), User.role == "resident").all()
     else:
         users = User.query.filter_by(role="resident").all()
-    enq, skip = wa_broadcast_enqueue(users, text)
+    enq, skip = wa_broadcast_enqueue_personal(users, text)
     try:
         wa_queue_drain_once()
     except Exception:
