@@ -8,20 +8,37 @@
     <div class="card-body">
         <form method="post" class="row g-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="col-md-4"><input class="form-control" name="name" placeholder="Ad" required></div>
             <div class="col-md-3">
-                <select class="form-select" name="type" required>
+                <label class="form-label small mb-1" for="create_tariff_name">Ad</label>
+                <input class="form-control" id="create_tariff_name" name="name" placeholder="Məs: təmir" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1" for="create_tariff_type">Tip</label>
+                <select class="form-select" id="create_tariff_type" name="type" required>
                     <option value="per_m2">Dəyişən (m2 uzre)</option>
                     <option value="fixed">Sabit</option>
                 </select>
             </div>
-            <div class="col-md-3"><input class="form-control" name="amount" type="number" step="0.01" placeholder="Məbləğ (AZN)" required></div>
-            <div class="col-md-2 d-flex align-items-center gap-2">
-                <div class="form-check mt-1">
-                    <input class="form-check-input" type="checkbox" name="apply_all" id="apply_all" checked>
-                    <label class="form-check-label small" for="apply_all">Hamısı</label>
+            <div class="col-md-2">
+                <label class="form-label small mb-1" for="create_tariff_amount">Məbləğ (AZN)</label>
+                <input class="form-control" id="create_tariff_amount" name="amount" type="number" step="0.01" placeholder="0.00" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1" for="create_tariff_is_active">Status</label>
+                <select class="form-select" name="is_active" id="create_tariff_is_active">
+                    <option value="1" selected>Aktiv</option>
+                    <option value="0">Deaktiv</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1 invisible" aria-hidden="true">.</label>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="form-check mb-0 flex-shrink-0">
+                        <input class="form-check-input" type="checkbox" name="apply_all" id="apply_all" checked>
+                        <label class="form-check-label small" for="apply_all">Hamısı</label>
+                    </div>
+                    <button type="submit" class="btn btn-success flex-grow-1">Əlavə et</button>
                 </div>
-                <button class="btn btn-primary w-100">Əlavə et</button>
             </div>
             <div class="col-12">
                 <label class="small text-muted">Mənzillər (hamısı seçilməyibsə)</label>
@@ -58,11 +75,12 @@
 <div class="card border-0 shadow-sm">
     <div class="card-body">
         <div class="table-responsive">
-            <table class="table align-middle">
+            <table class="table align-middle emtk-tariffs-table">
                 <thead><tr><th>Ad</th><th>Tip</th><th>Məbləğ</th><th>Aktiv</th><th>Əhatə</th><th></th></tr></thead>
                 <tbody>
                 {% for t in tariffs %}
-                    <tr>
+                    {% set tariff_stripe = loop.index0 % 2 %}
+                    <tr class="emtk-users-stripe-{{ tariff_stripe }}">
                         <td>{{ t.name }}</td>
                         <td>{{ t.type }}</td>
                         <td>{{ t.amount|azn }}</td>
@@ -77,20 +95,24 @@
                         <td class="text-end">
                             <button
                                 type="button"
-                                class="btn btn-sm btn-outline-secondary"
+                                class="btn btn-sm btn-outline-secondary emtk-icon-btn rounded-3"
                                 data-bs-toggle="collapse"
                                 data-bs-target="#edit-tariff-{{ t.id }}"
+                                title="Redaktə et"
+                                aria-label="Redaktə et"
                             >
-                                Redaktə et
+                                <span class="material-symbols-outlined">edit</span>
                             </button>
                             <form method="post" action="{{ url_for('delete_tariff', tariff_id=t.id) }}" class="d-inline" onsubmit="return confirm('Bu tariifi silmək istədiyinizə əminsiniz?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button class="btn btn-sm btn-outline-danger">Sil</button>
+                                <button type="submit" class="btn btn-sm btn-outline-danger emtk-icon-btn rounded-3" title="Sil" aria-label="Sil">
+                                    <span class="material-symbols-outlined">delete</span>
+                                </button>
                             </form>
                         </td>
                     </tr>
-                    <tr class="collapse" id="edit-tariff-{{ t.id }}">
-                        <td colspan="6" class="bg-light">
+                    <tr class="collapse emtk-users-stripe-{{ tariff_stripe }}" id="edit-tariff-{{ t.id }}">
+                        <td colspan="6" class="border-top border-light-subtle">
                             <form method="post" action="{{ url_for('update_tariff', tariff_id=t.id) }}" class="row g-2 align-items-end">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <div class="col-md-3">
@@ -128,7 +150,7 @@
                                     </select>
                                 </div>
                                 <div class="col-12 d-flex justify-content-end">
-                                    <button class="btn btn-primary btn-sm">Yadda saxla</button>
+                                    <button class="btn btn-emtk-save btn-sm">Yadda saxla</button>
                                 </div>
                             </form>
                         </td>

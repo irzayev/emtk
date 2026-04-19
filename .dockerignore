@@ -1,0 +1,42 @@
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+**/__pycache__
+*.py[cod]
+*.egg-info
+.venv
+venv
+env
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Environment / secrets (must be provided at runtime, not baked into image)
+.env
+.env.*
+
+# Local DB / backups (mounted as volume in production)
+instance
+instance/*.db
+instance/*.before_restore_*.db
+instance/*.backup_*.db
+
+# Local user uploads (mounted as volume in production)
+static/uploads
+
+# Logs / docs / IDE
+*.log
+logs
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Tests / docs that don't need to ship
+README.md
+tests
+docs

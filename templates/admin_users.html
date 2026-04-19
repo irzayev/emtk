@@ -1,4 +1,17 @@
 {% extends "base.html" %}
+{% macro sort_th(col_key, label, th_class='', link_class='text-body', title='') %}
+<th scope="col" class="emtk-sort-th {{ th_class }}"{% if title %} title="{{ title }}"{% endif %} aria-sort="{% if users_sort == col_key %}{{ 'ascending' if users_sort_dir == 'asc' else 'descending' }}{% else %}none{% endif %}">
+    <a href="{{ url_for('admin_users', **users_sort_next[col_key]) }}" class="emtk-sort-th-link text-decoration-none {{ link_class }} d-inline-flex align-items-center gap-1">
+        <span>{{ label }}</span>
+        {% if users_sort == col_key %}
+        <span class="material-symbols-outlined emtk-sort-th-icon" style="font-size:1rem;" aria-hidden="true">{{ 'arrow_upward' if users_sort_dir == 'asc' else 'arrow_downward' }}</span>
+        {% endif %}
+    </a>
+</th>
+{% endmacro %}
+{% macro apt_line(apt) -%}
+№{{ apt.number }}{% if apt.rooms %} · {{ apt.rooms }} otaq{% endif %} · {{ apt.floor }} mərtəbə{% if apt.building %} · {{ apt.building.name }}{% endif %}
+{%- endmacro %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">İstifadəçilər</h3>
@@ -23,8 +36,8 @@
                 <select class="form-select" name="role" required>
                     <option value="resident">resident</option>
                     <option value="komendant">komendant</option>
-                    {% if session.get('role') == 'superadmin' %}
-                    <option value="superadmin">superadmin</option>
+                    {% if session.get('role') == 'admin' %}
+                    <option value="admin">admin</option>
                     {% endif %}
                 </select>
             </div>
@@ -32,7 +45,7 @@
                 <input class="form-control" type="password" name="password" placeholder="Şifrə" required>
             </div>
             <div class="col-12">
-                <button class="btn btn-primary">Əlavə et</button>
+                <button class="btn btn-success">Əlavə et</button>
             </div>
         </form>
     </div>
@@ -41,26 +54,56 @@
 <div class="card border-0 shadow-sm">
     <div class="card-body">
         <div class="table-responsive">
-            <table class="table align-middle">
+            <table class="table align-middle emtk-users-table">
                 <thead>
                     <tr>
-                        <th>#</th>
-                        <th>Ad</th>
-                        <th>Telefon</th>
-                        <th>Email</th>
-                        <th>Rol</th>
-                        <th title="WhatsApp bildirişləri">WA</th>
-                        <th></th>
+                        {{ sort_th('id', '#', 'text-muted', 'text-secondary') }}
+                        {{ sort_th('name', 'Ad') }}
+                        {{ sort_th('apartment', 'Mənzil') }}
+                        {{ sort_th('phone', 'Telefon') }}
+                        {{ sort_th('email', 'Email') }}
+                        {{ sort_th('role', 'Rol') }}
+                        {{ sort_th('wa', 'WA', 'text-center', 'text-body', 'WhatsApp bildirişləri') }}
+                        <th scope="col" class="text-end"></th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for u in users %}
-                    <tr>
+                    {% set user_stripe = (loop.index0 % 2) %}
+                    <tr class="emtk-users-stripe-{{ user_stripe }}">
                         <td class="text-muted small">{{ u.id }}</td>
                         <td>{{ u.full_name }}</td>
+                        <td class="small text-muted text-start" style="max-width:14rem;">
+                            {% if u.apartments %}
+                                {% if u.apartments|length == 1 %}
+                                    <div>{{ apt_line(u.apartments[0]) }}</div>
+                                {% else %}
+                                    <div class="mb-1">{{ apt_line(u.apartments[0]) }}</div>
+                                    <button type="button" class="btn btn-link btn-sm p-0 d-inline-flex align-items-center gap-1 text-decoration-none" data-bs-toggle="collapse" data-bs-target="#user-apt-extra-{{ u.id }}" aria-expanded="false" aria-controls="user-apt-extra-{{ u.id }}">
+                                        <span class="material-symbols-outlined" style="font-size:1.05rem;">expand_more</span>
+                                        +{{ u.apartments|length - 1 }} mənzil
+                                    </button>
+                                    <div class="collapse mt-2 pt-2 border-top border-light-subtle" id="user-apt-extra-{{ u.id }}">
+                                        {% for apt in u.apartments[1:] %}
+                                        <div class="{% if not loop.last %}mb-2 pb-2 border-bottom border-light{% endif %}">{{ apt_line(apt) }}</div>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
                         <td class="text-muted small">{{ u.phone or '-' }}</td>
                         <td>{{ u.email }}</td>
-                        <td><span class="badge bg-secondary">{{ u.role }}</span></td>
+                        <td>
+                            {% if u.role == 'admin' %}
+                            <span class="badge bg-danger">{{ u.role }}</span>
+                            {% elif u.role == 'komendant' %}
+                            <span class="badge emtk-role-badge--komendant">{{ u.role }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ u.role }}</span>
+                            {% endif %}
+                        </td>
                         <td>
                             {% if u.whatsapp_connected %}
                             <span title="WhatsApp bildirişlərinə qoşulub{% if u.whatsapp_connected_at %} — {{ u.whatsapp_connected_at.strftime('%d.%m.%Y %H:%M') }}{% endif %}">
@@ -73,20 +116,24 @@
                             {% endif %}
                         </td>
                         <td class="text-end">
-                            {% if session.get('role') == 'superadmin' or u.role != 'superadmin' %}
-                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-user-{{ u.id }}">Redaktə et</button>
+                            {% if session.get('role') == 'admin' or u.role != 'admin' %}
+                            <button type="button" class="btn btn-sm btn-outline-secondary emtk-icon-btn rounded-3" data-bs-toggle="collapse" data-bs-target="#edit-user-{{ u.id }}" title="Redaktə et" aria-label="Redaktə et">
+                                <span class="material-symbols-outlined">edit</span>
+                            </button>
                             <form method="post" action="{{ url_for('admin_user_delete', user_id=u.id) }}" class="d-inline" onsubmit="return confirm('İstifadəçi silinsin?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button class="btn btn-sm btn-outline-danger">Sil</button>
+                                <button type="submit" class="btn btn-sm btn-outline-danger emtk-icon-btn rounded-3" title="Sil" aria-label="Sil">
+                                    <span class="material-symbols-outlined">delete</span>
+                                </button>
                             </form>
                             {% else %}
-                            <span class="text-muted small" title="Yalnız superadmin redaktə edə bilər">—</span>
+                            <span class="text-muted small" title="Yalnız admin redaktə edə bilər">—</span>
                             {% endif %}
                         </td>
                     </tr>
-                    {% if session.get('role') == 'superadmin' or u.role != 'superadmin' %}
-                    <tr class="collapse" id="edit-user-{{ u.id }}">
-                        <td colspan="7" class="bg-light">
+                    {% if session.get('role') == 'admin' or u.role != 'admin' %}
+                    <tr class="collapse emtk-users-stripe-{{ user_stripe }}" id="edit-user-{{ u.id }}">
+                        <td colspan="8" class="border-top border-light-subtle">
                             <form method="post" action="{{ url_for('admin_user_update', user_id=u.id) }}" class="row g-2">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <div class="col-md-4">
@@ -106,8 +153,8 @@
                                     <select class="form-select" name="role" required>
                                         <option value="resident" {% if u.role == 'resident' %}selected{% endif %}>resident</option>
                                         <option value="komendant" {% if u.role == 'komendant' %}selected{% endif %}>komendant</option>
-                                        {% if session.get('role') == 'superadmin' or u.role != 'superadmin' %}
-                                        <option value="superadmin" {% if u.role == 'superadmin' %}selected{% endif %}>superadmin</option>
+                                        {% if session.get('role') == 'admin' or u.role != 'admin' %}
+                                        <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>admin</option>
                                         {% endif %}
                                     </select>
                                 </div>
@@ -116,14 +163,14 @@
                                     <input class="form-control" type="password" name="password" placeholder="(dəyişmək)">
                                 </div>
                                 <div class="col-12">
-                                    <button class="btn btn-primary btn-sm">Yadda saxla</button>
+                                    <button class="btn btn-emtk-save btn-sm">Yadda saxla</button>
                                 </div>
                             </form>
                         </td>
                     </tr>
                     {% endif %}
                     {% else %}
-                    <tr><td colspan="7" class="text-muted">İstifadəçi yoxdur.</td></tr>
+                    <tr><td colspan="8" class="text-muted">İstifadəçi yoxdur.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

@@ -30,18 +30,22 @@
             <div class="col-md-12">
                 <label class="form-label">
                     Portal URL
-                    {% if session.get('role') != 'superadmin' %}
-                        <span class="badge bg-light text-muted border ms-1">yalnız superadmin</span>
+                    {% if session.get('role') != 'admin' %}
+                        <span class="badge bg-light text-muted border ms-1">yalnız admin</span>
                     {% endif %}
                 </label>
                 <input class="form-control"
                        name="portal_url"
                        value="{{ cfg.portal_url or '' }}"
                        placeholder="https://portal.example.com"
-                       {% if session.get('role') != 'superadmin' %}readonly{% endif %}>
+                       {% if session.get('role') != 'admin' %}readonly{% endif %}>
+            </div>
+            <div class="col-md-12">
+                <label class="form-label">WhatsApp qrupu</label>
+                <input class="form-control" type="url" name="whatsapp_group_url" value="{{ cfg.whatsapp_group_url or '' }}" placeholder="https://chat.whatsapp.com/... və ya digər qrup keçidi" autocomplete="off">
             </div>
             <div class="col-12">
-                <button class="btn btn-primary">Yadda saxla</button>
+                <button class="btn btn-emtk-save">Yadda saxla</button>
             </div>
         </form>
     </div>
@@ -62,7 +66,7 @@
                 <input class="form-control" name="building_address" placeholder="Məs: 5-ci mərtəbə, sol qanad">
             </div>
             <div class="col-md-2 d-flex align-items-end">
-                <button class="btn btn-outline-primary w-100">Əlavə et</button>
+                <button class="btn btn-outline-success w-100">Əlavə et</button>
             </div>
         </form>
         <div class="table-responsive">
@@ -75,12 +79,16 @@
                         <td class="text-muted small">{{ b.address or '—' }}</td>
                         <td>{{ b.apartments|length }}</td>
                         <td class="text-end">
-                            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#edit-building-{{ b.id }}">Redaktə</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary emtk-icon-btn rounded-3" data-bs-toggle="collapse" data-bs-target="#edit-building-{{ b.id }}" title="Redaktə" aria-label="Redaktə">
+                                <span class="material-symbols-outlined">edit</span>
+                            </button>
                             <form method="post" class="d-inline" onsubmit="return confirm('Korpusu silmək istədiyinizə əminsiniz?')">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="form_type" value="delete_building">
                                 <input type="hidden" name="building_id" value="{{ b.id }}">
-                                <button class="btn btn-sm btn-outline-danger">Sil</button>
+                                <button type="submit" class="btn btn-sm btn-outline-danger emtk-icon-btn rounded-3" title="Sil" aria-label="Sil">
+                                    <span class="material-symbols-outlined">delete</span>
+                                </button>
                             </form>
                         </td>
                     </tr>
@@ -92,7 +100,7 @@
                                 <input type="hidden" name="building_id" value="{{ b.id }}">
                                 <div class="col-md-5"><label class="form-label">Ad</label><input class="form-control" name="building_name" value="{{ b.name }}" required></div>
                                 <div class="col-md-5"><label class="form-label">Ünvan</label><input class="form-control" name="building_address" value="{{ b.address or '' }}"></div>
-                                <div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary w-100">Yadda saxla</button></div>
+                                <div class="col-md-2 d-flex align-items-end"><button class="btn btn-emtk-save w-100">Yadda saxla</button></div>
                             </form>
                         </td>
                     </tr>
@@ -124,7 +132,7 @@
                 <input class="form-control" type="number" min="1" max="9999" step="1" name="area" required>
             </div>
             <div class="col-12">
-                <button class="btn btn-outline-primary">Əlavə et</button>
+                <button class="btn btn-outline-success">Əlavə et</button>
             </div>
         </form>
         <div class="table-responsive">
@@ -137,12 +145,16 @@
                         <td>{{ p.rooms }}</td>
                         <td>{{ p.area|int }}</td>
                         <td class="text-end">
-                            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#edit-preset-{{ p.id }}">Redaktə et</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary emtk-icon-btn rounded-3" data-bs-toggle="collapse" data-bs-target="#edit-preset-{{ p.id }}" title="Redaktə et" aria-label="Redaktə et">
+                                <span class="material-symbols-outlined">edit</span>
+                            </button>
                             <form method="post" class="d-inline" onsubmit="return confirm('Preset silinsin?')">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="form_type" value="delete_apartment_preset">
                                 <input type="hidden" name="preset_id" value="{{ p.id }}">
-                                <button class="btn btn-sm btn-outline-danger">Sil</button>
+                                <button type="submit" class="btn btn-sm btn-outline-danger emtk-icon-btn rounded-3" title="Sil" aria-label="Sil">
+                                    <span class="material-symbols-outlined">delete</span>
+                                </button>
                             </form>
                         </td>
                     </tr>
@@ -155,7 +167,7 @@
                                 <div class="col-md-6"><label class="form-label">Ad</label><input class="form-control" name="name" value="{{ p.name }}" required></div>
                                 <div class="col-md-3"><label class="form-label">Otaq sayı</label><input class="form-control" type="number" min="1" max="999" step="1" name="rooms" value="{{ p.rooms }}" required></div>
                                 <div class="col-md-3"><label class="form-label">Sahə (m2)</label><input class="form-control" type="number" min="1" max="9999" step="1" name="area" value="{{ p.area|int }}" required></div>
-                                <div class="col-12"><button class="btn btn-primary">Yadda saxla</button></div>
+                                <div class="col-12"><button class="btn btn-emtk-save">Yadda saxla</button></div>
                             </form>
                         </td>
                     </tr>
@@ -184,7 +196,7 @@
                 <label class="form-check-label">TLS istifade et</label>
             </div>
             <div class="col-12">
-                <button class="btn btn-primary">Yadda saxla</button>
+                <button class="btn btn-emtk-save">Yadda saxla</button>
             </div>
         </form>
         <hr class="my-4">
@@ -230,6 +242,7 @@
             <div class="col-md-4">
                 <label class="form-label">Servis nömrəsi (bot)</label>
                 <input class="form-control" name="wa_service_number" value="{{ wa_cfg.service_number or '' }}" placeholder="+994XXXXXXXXX">
+                <small class="text-muted">Sakinlər panelində &quot;WhatsApp-da qoşul&quot; üçün lazımdır (wa.me bu nömrəyə yönləndirir). Webhook gələn mesajı profildəki telefonla uyğunlaşdırır.</small>
             </div>
             <div class="col-md-4">
                 <label class="form-label">Kütləvi limit (mesaj)</label>
@@ -246,7 +259,7 @@
                 <small class="text-muted">Bu URL-i Evolution API-də webhook kimi təyin edin (event: messages.upsert).</small>
             </div>
             <div class="col-12">
-                <button class="btn btn-primary">Yadda saxla</button>
+                <button class="btn btn-emtk-save">Yadda saxla</button>
             </div>
         </form>
         <hr class="my-4">
@@ -274,7 +287,7 @@
         </p>
         <div class="d-flex flex-wrap gap-2 align-items-center">
             <a class="btn btn-outline-primary" href="{{ url_for('admin_database_export') }}">Backup</a>
-            {% if session.get('role') == 'superadmin' %}
+            {% if session.get('role') == 'admin' %}
             <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#importDatabaseModal">
                 Bərpa
             </button>
@@ -285,7 +298,7 @@
         {% endif %}
     </div>
 </div>
-{% if database_backup_supported and session.get('role') == 'superadmin' %}
+{% if database_backup_supported and session.get('role') == 'admin' %}
 <div class="modal fade" id="importDatabaseModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -306,7 +319,7 @@
                         <input class="form-control" type="file" name="backup_file" accept=".db,.sqlite,.sqlite3" required>
                     </div>
                     <div class="mb-0">
-                        <label class="form-label fw-semibold">Təsdiq üçün superadmin şifrəsi</label>
+                        <label class="form-label fw-semibold">Təsdiq üçün admin şifrəsi</label>
                         <input class="form-control" type="password" name="confirm_password" autocomplete="current-password" required placeholder="Şifrə">
                     </div>
                 </form>
@@ -320,7 +333,7 @@
 </div>
 {% endif %}
 
-{% if session.get('role') == 'superadmin' %}
+{% if session.get('role') == 'admin' %}
 <div class="card border-danger border-2 shadow-sm mb-4">
     <div class="card-body">
         <h5 class="text-danger mb-1">Reset</h5>

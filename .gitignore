@@ -2,26 +2,40 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Virtual environments
+*.egg-info/
 .venv/
 venv/
-ENV/
 env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Environment / secrets
 .env
 .env.*
+!.env.example
 
-# Flask
+# Instance / database
 instance/
-*.sqlite3
-*.db
+instance/*.db
+instance/*.db-journal
+instance/*.db-wal
+instance/*.db-shm
+instance/*.before_restore_*.db
+instance/*.backup_*.db
 
-# OS / editor
-.DS_Store
-Thumbs.db
-.vscode/
+# Uploads (runtime user content)
+static/uploads/*
+!static/uploads/.gitkeep
 
 # Logs
 *.log
+logs/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

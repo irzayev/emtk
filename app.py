@@ -1,5 +1,5 @@
 import calendar
-import json
+import hmac
 import os
 import re
 import secrets
@@ -21,7 +21,6 @@ from typing import Optional
 
 from flask import (
     Flask,
-    abort,
     after_this_request,
     flash,
     redirect,
@@ -37,10 +36,12 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 from openpyxl import Workbook
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import exists, inspect as sa_inspect, select
+from sqlalchemy import exists, inspect as sa_inspect, select, text as sa_text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import joinedload
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
+from PIL import Image, UnidentifiedImageError
 
 import requests
 
@@ -87,6 +88,36 @@ if not secret_key:
         raise RuntimeError("SECRET_KEY must be set in production.")
 app.config["SECRET_KEY"] = secret_key
 app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
+
+# Ограничение размера тела запроса: 5 MB для обычных загрузок (картинки worklog и т.п.).
+# Для /admin/settings/database-import лимит поднимается до DB_IMPORT_MAX_BYTES
+# через before_request-хук (см. _adjust_max_content_length).
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+DB_IMPORT_MAX_BYTES = 100 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
+
+
+@app.before_request
+def _adjust_max_content_length():
+    """Для импорта БД разрешаем большие файлы, не расширяя глобальный лимит."""
+    if request.endpoint == "admin_database_import":
+        request.max_content_length = DB_IMPORT_MAX_BYTES
+
+
+@app.errorhandler(413)
+def _handle_payload_too_large(_err):
+    limit_mb = (
+        DB_IMPORT_MAX_BYTES if request.endpoint == "admin_database_import" else MAX_UPLOAD_BYTES
+    ) // (1024 * 1024)
+    if request.accept_mimetypes.best == "application/json":
+        return {"ok": False, "error": f"Fayl ölçüsü {limit_mb} MB-dan böyükdür."}, 413
+    flash(f"Fayl ölçüsü {limit_mb} MB-dan böyükdür.", "danger")
+    # Redirect только на свой хост, чтобы не превратить 413-хендлер в open-redirect.
+    target = url_for("dashboard")
+    referer = request.referrer or ""
+    if referer and request.host_url and referer.startswith(request.host_url):
+        target = referer
+    return redirect(target)
 
 # Session cookie hardening (behind HTTPS reverse proxy).
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -231,15 +262,18 @@ class Invoice(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+# Invoice.status when fully paid (legacy DB value was ASCII "odenilib").
+INVOICE_STATUS_PAID = "ödənilib"
+
+
 class Payment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     invoice_id = db.Column(db.Integer, db.ForeignKey("invoice.id"), nullable=False)
     invoice = db.relationship("Invoice", backref="payments")
     amount = db.Column(db.Numeric(12, 2), nullable=False)
     comment = db.Column(db.String(255), nullable=True)
-    status = db.Column(db.String(20), nullable=False, default="pending")  # pending | confirmed | rejected
+    status = db.Column(db.String(20), nullable=False, default="confirmed")
     reviewer_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-    reviewed_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
@@ -256,6 +290,7 @@ class SmtpConfig(db.Model):
     commandant_name = db.Column(db.String(120), nullable=True)
     contact_phone = db.Column(db.String(50), nullable=True)
     portal_url = db.Column(db.String(255), nullable=True)
+    whatsapp_group_url = db.Column(db.String(512), nullable=True)
 
 
 class WhatsappConfig(db.Model):
@@ -405,7 +440,7 @@ def _apply_credit_to_invoice(invoice: "Invoice") -> float:
     applied = min(credit, remaining)
     invoice.paid_amount = round(float(invoice.paid_amount or 0) + applied, 2)
     apt.credit_balance = round(credit - applied, 2)
-    invoice.status = "odenilib" if float(invoice.paid_amount or 0) >= float(invoice.amount or 0) else "gozlemede"
+    invoice.status = INVOICE_STATUS_PAID if float(invoice.paid_amount or 0) >= float(invoice.amount or 0) else "gozlemede"
     return round(applied, 2)
 
 
@@ -419,7 +454,7 @@ def _move_invoice_overpay_to_credit(invoice: "Invoice") -> float:
         return 0.0
     invoice.paid_amount = float(invoice.amount or 0)
     apt.credit_balance = round(float(apt.credit_balance or 0) + overflow, 2)
-    invoice.status = "odenilib"
+    invoice.status = INVOICE_STATUS_PAID
     return round(overflow, 2)
 
 
@@ -436,7 +471,7 @@ def _apply_payment_delta(invoice: "Invoice", delta: float, *, debt_adjustment: b
     if not apt:
         # No apartment linked — just update paid_amount directly.
         invoice.paid_amount = round(float(invoice.paid_amount or 0) + float(delta), 2)
-        invoice.status = "odenilib" if float(invoice.paid_amount or 0) >= float(invoice.amount or 0) else "gozlemede"
+        invoice.status = INVOICE_STATUS_PAID if float(invoice.paid_amount or 0) >= float(invoice.amount or 0) else "gozlemede"
         return {"moved_to_credit": 0.0, "removed_from_credit": 0.0}
 
     delta = float(delta or 0)
@@ -467,7 +502,7 @@ def _apply_payment_delta(invoice: "Invoice", delta: float, *, debt_adjustment: b
             if need > 0:
                 invoice.paid_amount = max(0.0, round(float(invoice.paid_amount or 0) - need, 2))
 
-        invoice.status = "odenilib" if float(invoice.paid_amount or 0) >= float(invoice.amount or 0) else "gozlemede"
+        invoice.status = INVOICE_STATUS_PAID if float(invoice.paid_amount or 0) >= float(invoice.amount or 0) else "gozlemede"
 
     return {
         "moved_to_credit": round(float(moved_to_credit or 0), 2),
@@ -475,13 +510,64 @@ def _apply_payment_delta(invoice: "Invoice", delta: float, *, debt_adjustment: b
     }
 
 
+IMAGE_MAX_BYTES = 5 * 1024 * 1024  # 5 MB на одну картинку
+_PIL_FORMAT_TO_EXT = {
+    "JPEG": {"jpg", "jpeg"},
+    "PNG": {"png"},
+    "WEBP": {"webp"},
+    "GIF": {"gif"},
+}
+
+
 def save_uploaded_image(file_storage):
+    """Сохранить загруженную картинку с валидацией:
+    - whitelist расширений (jpg/jpeg/png/webp/gif),
+    - лимит 5 MB на файл,
+    - реальная проверка содержимого через Pillow (magic bytes + decoding),
+    - соответствие реального формата расширению (anti-polyglot).
+    При любой ошибке пишет flash и возвращает None.
+    """
     if not file_storage or not file_storage.filename:
         return None
 
     allowed_ext = {"jpg", "jpeg", "png", "webp", "gif"}
     ext = file_storage.filename.rsplit(".", 1)[-1].lower() if "." in file_storage.filename else ""
     if ext not in allowed_ext:
+        flash("Şəkil formatı dəstəklənmir (jpg, png, webp, gif).", "warning")
+        return None
+
+    stream = file_storage.stream
+    try:
+        stream.seek(0, 2)
+        size = stream.tell()
+        stream.seek(0)
+    except (OSError, ValueError):
+        flash("Şəkil yüklənmədi.", "warning")
+        return None
+
+    if size == 0:
+        return None
+    if size > IMAGE_MAX_BYTES:
+        flash("Şəkil ölçüsü 5 MB-dan böyükdür.", "warning")
+        return None
+
+    # verify() отмечает объект как непригодный для дальнейших операций,
+    # поэтому используем отдельный open() для проверки и потом пере-seek'аем stream для save().
+    try:
+        with Image.open(stream) as img:
+            img.verify()
+            detected = (img.format or "").upper()
+    except (UnidentifiedImageError, OSError, SyntaxError):
+        flash("Fayl yararsız şəkildir.", "warning")
+        return None
+    finally:
+        try:
+            stream.seek(0)
+        except (OSError, ValueError):
+            pass
+
+    if ext not in _PIL_FORMAT_TO_EXT.get(detected, set()):
+        flash("Şəkil məzmunu uzantı ilə uyğun deyil.", "warning")
         return None
 
     uploads_dir = Path(app.root_path) / app.config["UPLOAD_FOLDER"] / "worklog"
@@ -493,8 +579,19 @@ def save_uploaded_image(file_storage):
     return f"/static/uploads/worklog/{unique_name}"
 
 
+def _is_sqlite() -> bool:
+    """PRAGMA и нетипичные ALTER TABLE работают только в SQLite.
+    На других диалектах схему поддерживает db.create_all() + полноценные миграции."""
+    try:
+        return db.engine.dialect.name == "sqlite"
+    except Exception:
+        return False
+
+
 def ensure_poll_schema():
     # Lightweight SQLite migration for already-created DB.
+    if not _is_sqlite():
+        return
     with db.engine.connect() as conn:
         columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(poll)")}
         if "result_visibility" not in columns:
@@ -503,19 +600,21 @@ def ensure_poll_schema():
 
 def ensure_payment_schema():
     # Lightweight SQLite migration for already-created DB.
+    if not _is_sqlite():
+        return
     with db.engine.connect() as conn:
         columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(payment)")}
         if "status" not in columns:
             conn.exec_driver_sql("ALTER TABLE payment ADD COLUMN status VARCHAR(20) DEFAULT 'confirmed' NOT NULL")
         if "reviewer_user_id" not in columns:
             conn.exec_driver_sql("ALTER TABLE payment ADD COLUMN reviewer_user_id INTEGER")
-        if "reviewed_at" not in columns:
-            conn.exec_driver_sql("ALTER TABLE payment ADD COLUMN reviewed_at DATETIME")
         if "comment" not in columns:
             conn.exec_driver_sql("ALTER TABLE payment ADD COLUMN comment VARCHAR(255)")
 
 
 def ensure_apartment_schema():
+    if not _is_sqlite():
+        return
     with db.engine.connect() as conn:
         columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(apartment)")}
         if "credit_balance" not in columns:
@@ -525,10 +624,9 @@ def ensure_apartment_schema():
 
 
 def ensure_apartment_preset_schema():
-    with db.engine.connect() as conn:
-        tables = {row[0] for row in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'")}
-        if "apartment_preset" not in tables:
-            db.create_all()
+    inspector = sa_inspect(db.engine)
+    if not inspector.has_table("apartment_preset"):
+        db.create_all()
 
 
 def ensure_building_schema():
@@ -537,6 +635,8 @@ def ensure_building_schema():
     if not inspector.has_table("building"):
         db.create_all()
     # Add building_id to apartment if not present (for existing DBs)
+    if not _is_sqlite():
+        return
     with db.engine.connect() as conn:
         apartment_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(apartment)")}
         if "building_id" not in apartment_cols:
@@ -618,17 +718,16 @@ def ensure_money_numeric_schema():
                         invoice_id INTEGER NOT NULL,
                         amount NUMERIC(12,2) NOT NULL,
                         comment VARCHAR(255),
-                        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                        status VARCHAR(20) NOT NULL DEFAULT 'confirmed',
                         reviewer_user_id INTEGER,
-                        reviewed_at DATETIME,
                         created_at DATETIME,
                         FOREIGN KEY(invoice_id) REFERENCES invoice (id),
                         FOREIGN KEY(reviewer_user_id) REFERENCES user (id)
                     )
                 """,
                 "copy_sql": """
-                    INSERT INTO payment_new (id, invoice_id, amount, comment, status, reviewer_user_id, reviewed_at, created_at)
-                    SELECT id, invoice_id, CAST(amount AS NUMERIC), comment, status, reviewer_user_id, reviewed_at, created_at
+                    INSERT INTO payment_new (id, invoice_id, amount, comment, status, reviewer_user_id, created_at)
+                    SELECT id, invoice_id, CAST(amount AS NUMERIC), comment, status, reviewer_user_id, created_at
                     FROM payment
                 """,
             },
@@ -721,6 +820,8 @@ def ensure_money_numeric_schema():
 
 def ensure_system_schema():
     # Lightweight SQLite migration for already-created DB.
+    if not _is_sqlite():
+        return
     with db.engine.connect() as conn:
         columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(smtp_config)")}
         if "system_name" not in columns:
@@ -733,12 +834,27 @@ def ensure_system_schema():
             conn.exec_driver_sql("ALTER TABLE smtp_config ADD COLUMN contact_phone VARCHAR(50)")
         if "portal_url" not in columns:
             conn.exec_driver_sql("ALTER TABLE smtp_config ADD COLUMN portal_url VARCHAR(255)")
+        if "whatsapp_group_url" not in columns:
+            conn.exec_driver_sql("ALTER TABLE smtp_config ADD COLUMN whatsapp_group_url VARCHAR(512)")
 
 
 def ensure_user_role_migration():
-    # Rename role value: commandant -> komendant
-    with db.engine.connect() as conn:
+    # Rename role values (idempotent). Use begin() so DDL/DML is committed (connect() alone rolls back on exit).
+    with db.engine.begin() as conn:
         conn.exec_driver_sql("UPDATE user SET role='komendant' WHERE role='commandant'")
+        conn.exec_driver_sql("UPDATE user SET role='admin' WHERE role='superadmin'")
+
+
+def ensure_invoice_paid_status_spelling():
+    """Migrate Invoice.status from legacy ASCII 'odenilib' to ödənilib (idempotent)."""
+    try:
+        with db.engine.begin() as conn:
+            conn.execute(
+                sa_text("UPDATE invoice SET status = :paid WHERE status = 'odenilib'"),
+                {"paid": INVOICE_STATUS_PAID},
+            )
+    except Exception:
+        pass
 
 
 def ensure_whatsapp_schema():
@@ -750,6 +866,8 @@ def ensure_whatsapp_schema():
         or not inspector.has_table("whatsapp_webhook_log")
     ):
         db.create_all()
+    if not _is_sqlite():
+        return
     with db.engine.connect() as conn:
         user_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(user)")}
         if "whatsapp_connected" not in user_cols:
@@ -763,16 +881,22 @@ def ensure_whatsapp_schema():
 _did_role_migration = False
 _did_expense_schema = False
 _did_money_migration = False
-_did_default_superadmin_seed = False
+_did_default_admin_seed = False
 _did_apartment_schema_migration = False
 _did_tariff_scope_schema = False
 _did_building_schema = False
 _did_whatsapp_schema = False
 
 
-def ensure_default_superadmin_seed():
-    # Ensure there is always a bootstrap superadmin in a fresh DB.
-    if User.query.filter_by(role="superadmin").first():
+def ensure_default_admin_seed():
+    # Ensure there is always a bootstrap admin in a fresh DB.
+    bootstrap = User.query.filter_by(email="admin@emtk.itg.az").first()
+    if bootstrap:
+        if bootstrap.role != "admin":
+            bootstrap.role = "admin"
+            db.session.commit()
+        return
+    if User.query.filter_by(role="admin").first():
         return
     db.session.add(
         User(
@@ -780,7 +904,7 @@ def ensure_default_superadmin_seed():
             phone="+000000",
             email="admin@emtk.itg.az",
             password_hash=generate_password_hash("admin"),
-            role="superadmin",
+            role="admin",
         )
     )
     db.session.commit()
@@ -795,13 +919,14 @@ def run_startup_migrations():
     ensure_apartment_schema()
     ensure_apartment_preset_schema()
     ensure_system_schema()
+    ensure_invoice_paid_status_spelling()
     ensure_expense_schema()
     ensure_balance_schema()
     ensure_tariff_scope_schema()
     ensure_building_schema()
     ensure_whatsapp_schema()
     ensure_user_role_migration()
-    ensure_default_superadmin_seed()
+    ensure_default_admin_seed()
 
 
 @app.before_request
@@ -809,11 +934,14 @@ def _run_role_migration_once():
     global _did_role_migration
     global _did_expense_schema
     global _did_money_migration
-    global _did_default_superadmin_seed
+    global _did_default_admin_seed
     global _did_apartment_schema_migration
     global _did_tariff_scope_schema
     global _did_building_schema
     global _did_whatsapp_schema
+    # Legacy session after role rename superadmin -> admin
+    if session.get("role") == "superadmin":
+        session["role"] = "admin"
     # Expense sütunları əvvəl (NUMERIC rebuild üçün category mövcud olsun).
     if not _did_expense_schema:
         try:
@@ -853,12 +981,12 @@ def _run_role_migration_once():
         finally:
             _did_whatsapp_schema = True
     start_whatsapp_worker()
-    if _did_default_superadmin_seed:
+    if _did_default_admin_seed:
         return
     try:
-        ensure_default_superadmin_seed()
+        ensure_default_admin_seed()
     finally:
-        _did_default_superadmin_seed = True
+        _did_default_admin_seed = True
 
 
 def ensure_expense_schema():
@@ -916,6 +1044,18 @@ def compute_invoice_amount(apartment, active_tariffs, scope_map):
         tariff_amount = float(t.amount or 0)
         total += tariff_amount * float(apartment.area or 0) if t.type == "per_m2" else tariff_amount
     return round(total, 2)
+
+
+def active_tariff_names_for_apartment(apartment_id: int, active_tariffs, scope_map) -> list:
+    """Names of active tariffs applied to the apartment (same scope rules as compute_invoice_amount)."""
+    names = []
+    for t in active_tariffs:
+        scope = scope_map.get(t.id)
+        if scope is not None and apartment_id not in scope:
+            continue
+        nm = (getattr(t, "name", None) or "").strip()
+        names.append(nm if nm else f"#{t.id}")
+    return names
 
 
 def get_smtp_config():
@@ -1007,7 +1147,7 @@ def build_invoice_email(invoice, resident, cfg):
         f"Period: {invoice.period}",
         "",
         f"Hesablanıb: {invoice.amount:.2f} AZN",
-        f"Ödənilib: {invoice.paid_amount:.2f} AZN",
+        f"ödənilib: {invoice.paid_amount:.2f} AZN",
         f"Borc: {debt:.2f} AZN",
         f"Kredit: {credit:.2f} AZN",
         f"Status: {invoice.status}",
@@ -1044,12 +1184,79 @@ def build_receipt_email(payment, cfg):
         f"Period: {invoice.period}\n"
         f"Ödəniş: {float(payment.amount):.2f} AZN\n"
         f"Hesablanıb: {float(invoice.amount):.2f} AZN\n"
-        f"Ödənilib: {float(invoice.paid_amount):.2f} AZN\n"
+        f"ödənilib: {float(invoice.paid_amount):.2f} AZN\n"
         f"Balans: {balance:.2f} AZN\n"
         f"Tarix: {(payment.created_at or datetime.now(timezone.utc)).strftime('%d.%m.%Y %H:%M')}\n"
     )
     html_body = render_template("receipt_email.html", payment=payment, cfg=cfg, system_name=system_name)
     return subject, plain_body, html_body
+
+
+def build_whatsapp_receipt_text(payment, cfg) -> str:
+    """Qısa ödəniş qəbzi mətni + portalda qəbz linki (WhatsApp)."""
+    invoice = payment.invoice
+    resident = invoice.apartment.owner if invoice and invoice.apartment else None
+    system_name = (cfg.system_name or "").strip() or "eMTK"
+    balance = float(invoice.paid_amount or 0) - float(invoice.amount or 0)
+    portal_url = (cfg.portal_url or "").strip().rstrip("/")
+    try:
+        if portal_url:
+            path = url_for("resident_receipt", payment_id=payment.id)
+            link = f"{portal_url}{path}"
+        else:
+            link = url_for("resident_receipt", payment_id=payment.id, _external=True)
+    except RuntimeError:
+        link = ""
+
+    lines = [
+        f"*{system_name}*",
+        f"Ödəniş qəbzi #{payment.id}",
+        "",
+        f"Sakin: {resident.full_name if resident else '-'}",
+        f"Mənzil: {invoice.apartment.number}",
+        f"Period: {invoice.period}",
+        "",
+        f"Ödəniş: {float(payment.amount):.2f} AZN",
+        f"Hesablanıb: {float(invoice.amount):.2f} AZN",
+        f"ödənilib: {float(invoice.paid_amount):.2f} AZN",
+        f"Balans: {balance:.2f} AZN",
+        f"Tarix: {(payment.created_at or datetime.now(timezone.utc)).strftime('%d.%m.%Y %H:%M')}",
+    ]
+    if link:
+        lines += ["", f"Qəbz: {link}"]
+    if portal_url:
+        lines += ["", f"Portal: {portal_url}"]
+    contact_phone = (cfg.contact_phone or "").strip()
+    commandant_name = (cfg.commandant_name or "").strip()
+    if contact_phone or commandant_name:
+        lines.append("")
+        if contact_phone:
+            lines.append(f"Əlaqə: {contact_phone}")
+        if commandant_name:
+            lines.append(commandant_name)
+    return "\n".join(lines)
+
+
+def maybe_enqueue_payment_receipt_whatsapp(payment: "Payment") -> None:
+    """Təsdiqlənmiş ödəniş üçün qəbz mətnini WhatsApp növbəsinə əlavə edir (rate limit üçün)."""
+    if not payment or (payment.status or "") != "confirmed":
+        return
+    wa_cfg = get_whatsapp_config()
+    if not (wa_cfg.enabled and wa_cfg.api_url and wa_cfg.api_key and wa_cfg.instance):
+        return
+    invoice = payment.invoice
+    if not invoice or not invoice.apartment:
+        return
+    resident = invoice.apartment.owner
+    if not resident or not (resident.phone or "").strip():
+        return
+    cfg = get_smtp_config()
+    text = build_whatsapp_receipt_text(payment, cfg)
+    if wa_queue_enqueue(resident.phone, text, invoice_id=invoice.id, user_id=resident.id):
+        try:
+            wa_queue_drain_once()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -1125,7 +1332,7 @@ def build_whatsapp_invoice_text(invoice, resident, smtp_cfg) -> str:
         f"Mənzil: {invoice.apartment.number}",
         "",
         f"Hesablanıb: {float(invoice.amount):.2f} AZN",
-        f"Ödənilib: {float(invoice.paid_amount):.2f} AZN",
+        f"ödənilib: {float(invoice.paid_amount):.2f} AZN",
         f"Balans: {balance:.2f} AZN",
     ]
     if link:
@@ -1161,6 +1368,47 @@ def wa_queue_enqueue(phone: str, text: str, *, invoice_id: Optional[int] = None,
     db.session.add(item)
     db.session.commit()
     return item
+
+
+WA_BROADCAST_MAX_LEN = 4096
+
+
+def build_whatsapp_content_broadcast_text(kind: str, title: str, body: str, smtp_cfg) -> str:
+    """Mətn iş jurnalı və ya elan üçün WhatsApp (sadə format). kind: 'elan' | 'is'."""
+    system_name = (smtp_cfg.system_name or "").strip() or "eMTK"
+    label = "Yeni elan" if kind == "elan" else "Yeni iş qeydi"
+    t = (title or "").strip()
+    b = (body or "").strip()
+    lines = [f"{system_name}", f"{label}", "", t, "", b]
+    text = "\n".join(lines)
+    if len(text) > WA_BROADCAST_MAX_LEN:
+        text = text[: WA_BROADCAST_MAX_LEN - 1] + "…"
+    return text
+
+
+def wa_broadcast_enqueue(users: list, text: str) -> tuple[int, int]:
+    """
+    Sakinlərə eyni mətni növbəyə əlavə edir (telefon üzrə təkrarlar bir dəfə).
+    qaytarır: (növbəyə düşən, telefonu olmayan / boş)
+    """
+    text = (text or "").strip()
+    if not text:
+        return 0, 0
+    if len(text) > WA_BROADCAST_MAX_LEN:
+        text = text[: WA_BROADCAST_MAX_LEN - 1] + "…"
+    seen_digits: set[str] = set()
+    enq, skipped = 0, 0
+    for u in users:
+        digits = _wa_digits(u.phone or "")
+        if not digits:
+            skipped += 1
+            continue
+        if digits in seen_digits:
+            continue
+        seen_digits.add(digits)
+        if wa_queue_enqueue(u.phone, text, user_id=u.id):
+            enq += 1
+    return enq, skipped
 
 
 def wa_queue_drain_once() -> int:
@@ -1227,7 +1475,17 @@ def start_whatsapp_worker():
 def inject_system_config():
     cfg = get_smtp_config()
     system_name = (cfg.system_name or "").strip() or "eMTK"
-    return {"system_name": system_name}
+    wa_digits = _wa_digits((cfg.contact_phone or "").strip())
+    support_whatsapp_url = f"https://wa.me/{wa_digits}" if wa_digits else None
+    wg = (cfg.whatsapp_group_url or "").strip()
+    if wg and not wg.lower().startswith(("http://", "https://")):
+        wg = "https://" + wg
+    whatsapp_group_url = wg[:512] if wg else None
+    return {
+        "system_name": system_name,
+        "support_whatsapp_url": support_whatsapp_url,
+        "whatsapp_group_url": whatsapp_group_url,
+    }
 
 
 @app.context_processor
@@ -1235,22 +1493,37 @@ def inject_whatsapp_config():
     try:
         cfg = get_whatsapp_config()
     except Exception:
-        return {"wa_enabled": False, "wa_service_number": None, "current_user_obj": None}
+        return {
+            "wa_enabled": False,
+            "wa_service_number": None,
+            "wa_connect_available": False,
+            "wa_resident_hint_no_service": False,
+            "current_user_obj": None,
+            "wa_bulk_limit": 10,
+            "wa_bulk_window_sec": 300,
+        }
     user = None
     try:
         user = current_user()
     except Exception:
         user = None
+    has_api = bool(cfg.api_url and cfg.api_key and cfg.instance)
+    wa_on = bool(cfg.enabled and has_api)
+    service_set = bool((cfg.service_number or "").strip())
     return {
-        "wa_enabled": bool(cfg.enabled and cfg.api_url and cfg.api_key and cfg.instance),
+        "wa_enabled": wa_on,
         "wa_service_number": cfg.service_number,
+        "wa_connect_available": service_set,
+        "wa_resident_hint_no_service": bool(wa_on and not service_set),
         "current_user_obj": user,
+        "wa_bulk_limit": int(cfg.bulk_limit or 10),
+        "wa_bulk_window_sec": int(cfg.bulk_window_sec or 300),
     }
 
 
 def payment_status_label(status: str) -> str:
     return {
-        "pending": "Gözləmədə",
+        "pending": "gözləmədə",
         "confirmed": "Təsdiqlənib",
         "rejected": "İmtina edilib",
     }.get(status or "", status or "")
@@ -1264,11 +1537,30 @@ def payment_status_badge(status: str) -> str:
     }.get(status or "", "secondary")
 
 
+def _avatar_initials(full_name: str) -> str:
+    parts = [p for p in (full_name or "").strip().split() if p]
+    if not parts:
+        return "?"
+    if len(parts) == 1:
+        return parts[0][:2].upper()
+    return (parts[0][:1] + parts[1][:1]).upper()
+
+
+def _avatar_tone(key) -> str:
+    """Pick a stable palette tone (a..e) based on a string key."""
+    s = str(key or "")
+    if not s:
+        return "e"
+    return "abcde"[sum(ord(c) for c in s) % 5]
+
+
 @app.context_processor
 def inject_helpers():
     return {
         "payment_status_label": payment_status_label,
         "payment_status_badge": payment_status_badge,
+        "avatar_initials": _avatar_initials,
+        "avatar_tone": _avatar_tone,
     }
 
 
@@ -1382,7 +1674,18 @@ def login():
 @limiter.limit("5 per minute")
 def register():
     if request.method == "POST":
-        full_name = request.form["full_name"].strip()
+        first_name = (request.form.get("first_name") or "").strip()
+        last_name = (request.form.get("last_name") or "").strip()
+        full_name = f"{first_name} {last_name}".strip()
+        if not first_name:
+            flash("Adı daxil edin.", "danger")
+            return redirect(url_for("register"))
+        if not last_name:
+            flash("Soyadı daxil edin.", "danger")
+            return redirect(url_for("register"))
+        if len(full_name) > 120:
+            flash("Ad və soyad birlikdə 120 simvoldan çox ola bilməz.", "danger")
+            return redirect(url_for("register"))
         phone = request.form.get("phone", "").strip()
         email = (request.form.get("email") or "").strip().lower()
         password = request.form.get("password") or ""
@@ -1506,6 +1809,8 @@ def dashboard():
                 .all()
             )
         works = WorkLog.query.order_by(WorkLog.created_at.desc()).limit(5).all()
+        announcements = Announcement.query.order_by(Announcement.created_at.desc()).limit(8).all()
+
         return render_template(
             "resident_dashboard.html",
             apartment=apartment,
@@ -1519,6 +1824,7 @@ def dashboard():
             recent_expenses=recent_expenses,
             receipt_by_invoice=receipt_by_invoice,
             works=works,
+            announcements=announcements,
             payment_history=payment_history,
         )
 
@@ -1548,8 +1854,10 @@ def dashboard():
     debt = db.session.query(db.func.sum(debt_expr)).scalar() or 0
     house_credit_total = db.session.query(db.func.sum(Apartment.credit_balance)).scalar() or 0
     debt = float(debt or 0) - float(house_credit_total or 0)
-    pending_invoices = Invoice.query.filter(Invoice.status != "odenilib").count()
+    pending_invoices = Invoice.query.filter(Invoice.status != INVOICE_STATUS_PAID).count()
     recent_logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(10).all()
+    dashboard_works = WorkLog.query.order_by(WorkLog.created_at.desc()).limit(6).all()
+    dashboard_announcements = Announcement.query.order_by(Announcement.created_at.desc()).limit(6).all()
     period_payments = Payment.query.filter(
         Payment.status == "confirmed", Payment.created_at >= from_dt, Payment.created_at < to_dt_exclusive
     ).order_by(Payment.created_at.asc()).all()
@@ -1646,6 +1954,8 @@ def dashboard():
         unpaid_expenses_total=round(float(unpaid_expenses_total or 0), 2),
         pending_invoices=pending_invoices,
         recent_logs=recent_logs,
+        dashboard_works=dashboard_works,
+        dashboard_announcements=dashboard_announcements,
         from_date=from_date_obj.strftime("%Y-%m-%d"),
         to_date=to_date_obj.strftime("%Y-%m-%d"),
         payment_table=payment_table,
@@ -1659,7 +1969,7 @@ def dashboard():
 
 @app.route("/admin/balance/topup", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def balance_topup():
     try:
         amount = float(request.form.get("amount", "0") or 0)
@@ -1689,9 +1999,32 @@ def select_apartment():
     return redirect(url_for("dashboard"))
 
 
+def _apartment_row_sort_key(ap: Apartment) -> tuple:
+    """Sıra: korpus (ad, id), sonra mənzil nömrəsi (əvvəl rəqəm, sonra mətn)."""
+    if ap.building_id is not None and ap.building is not None:
+        b_name = (ap.building.name or "").strip().lower()
+        b_id = int(ap.building_id)
+    else:
+        b_name = ""
+        b_id = 0
+    raw = (ap.number or "").strip()
+    try:
+        n = int(raw)
+        tail = ""
+    except ValueError:
+        m = re.match(r"^(\d+)(.*)$", raw)
+        if m:
+            n = int(m.group(1))
+            tail = (m.group(2) or "").lower()
+        else:
+            n = 10**9
+            tail = raw.lower()
+    return (b_name, b_id, n, tail)
+
+
 @app.route("/admin/apartments", methods=["GET", "POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def admin_apartments():
     if request.method == "POST":
         number = request.form["number"].strip()
@@ -1726,7 +2059,11 @@ def admin_apartments():
         if floor is None:
             flash("Mərtəbə daxil edilməlidir.", "danger")
             return redirect(url_for("admin_apartments"))
-        owner_user_id = int(request.form["owner_user_id"])
+        owner_raw = (request.form.get("owner_user_id") or "").strip()
+        if not owner_raw.isdigit():
+            flash("Sahib seçilməlidir.", "danger")
+            return redirect(url_for("admin_apartments"))
+        owner_user_id = int(owner_raw)
         building_id_raw = (request.form.get("building_id", "") or "").strip()
         building_id = int(building_id_raw) if building_id_raw.isdigit() else None
         db.session.add(Apartment(number=number, floor=floor, rooms=rooms, area=area, owner_user_id=owner_user_id, building_id=building_id))
@@ -1738,11 +2075,24 @@ def admin_apartments():
     building_filter_raw = (request.args.get("building_id", "") or "").strip()
     building_filter_id = int(building_filter_raw) if building_filter_raw.isdigit() else None
 
-    apartments_query = Apartment.query
+    apartments_query = Apartment.query.options(
+        joinedload(Apartment.building),
+        joinedload(Apartment.owner),
+    )
     if building_filter_id:
         apartments_query = apartments_query.filter(Apartment.building_id == building_filter_id)
-    apartments = apartments_query.order_by(Apartment.number).all()
-    residents = User.query.filter_by(role="resident").all()
+    apartments = apartments_query.all()
+
+    allowed_apartment_sorts = ("number", "floor", "rooms", "area", "tariff", "owner", "balance")
+    sort = (request.args.get("sort") or "").strip().lower()
+    sort_dir = (request.args.get("dir") or "asc").strip().lower()
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "asc"
+    if sort not in allowed_apartment_sorts:
+        sort = ""
+        sort_dir = "asc"
+
+    residents = User.query.filter_by(role="resident").order_by(db.func.lower(User.full_name), User.id).all()
     apartment_presets = ApartmentPreset.query.order_by(ApartmentPreset.rooms.asc(), ApartmentPreset.area.asc()).all()
     buildings = Building.query.order_by(Building.name.asc()).all()
     debt_expr = db.case((Invoice.amount - Invoice.paid_amount > 0, Invoice.amount - Invoice.paid_amount), else_=0.0)
@@ -1757,6 +2107,64 @@ def admin_apartments():
         inv_bal = float(inv_balance_by_apartment_id.get(a.id, 0) or 0)
         credit = float(a.credit_balance or 0)
         debt_by_apartment_id[a.id] = round(inv_bal - credit, 2)
+    active_tariffs = Tariff.query.filter_by(is_active=True).order_by(Tariff.id.asc()).all()
+    scope_rows_all = TariffApartment.query.all()
+    scope_map_all = {}
+    for r in scope_rows_all:
+        scope_map_all.setdefault(r.tariff_id, set()).add(r.apartment_id)
+    tariff_names_by_apartment_id = {
+        a.id: active_tariff_names_for_apartment(a.id, active_tariffs, scope_map_all) for a in apartments
+    }
+
+    if not sort:
+        apartments.sort(key=_apartment_row_sort_key)
+    else:
+        reverse = sort_dir == "desc"
+        if sort == "number":
+            apartments.sort(key=_apartment_row_sort_key, reverse=reverse)
+        elif sort == "floor":
+            apartments.sort(key=lambda a: (a.floor, a.id), reverse=reverse)
+        elif sort == "rooms":
+
+            def _rooms_sort_key(ap: Apartment):
+                if ap.rooms is None:
+                    return (1, 0, ap.id)
+                return (0, ap.rooms, ap.id)
+
+            apartments.sort(key=_rooms_sort_key, reverse=reverse)
+        elif sort == "area":
+            apartments.sort(key=lambda a: (float(a.area or 0), a.id), reverse=reverse)
+        elif sort == "tariff":
+
+            def _tariff_sort_key(ap: Apartment):
+                names = tariff_names_by_apartment_id.get(ap.id) or []
+                joined = ", ".join(names).strip().lower()
+                return (0, joined, ap.id) if joined else (1, "", ap.id)
+
+            apartments.sort(key=_tariff_sort_key, reverse=reverse)
+        elif sort == "owner":
+            apartments.sort(
+                key=lambda a: ((a.owner.full_name or "").lower(), a.id),
+                reverse=reverse,
+            )
+        elif sort == "balance":
+            apartments.sort(
+                key=lambda a: (debt_by_apartment_id.get(a.id, 0), a.id),
+                reverse=reverse,
+            )
+
+    base_apartments_q = {}
+    if building_filter_id:
+        base_apartments_q["building_id"] = building_filter_id
+    apartments_sort_next = {}
+    for c in allowed_apartment_sorts:
+        q = dict(base_apartments_q)
+        if sort != c:
+            q.update(sort=c, dir="asc")
+        else:
+            q.update(sort=c, dir=("desc" if sort_dir == "asc" else "asc"))
+        apartments_sort_next[c] = q
+    apartments_sort_preserve_q = {"sort": sort, "dir": sort_dir} if sort else {}
     return render_template(
         "admin_apartments.html",
         apartments=apartments,
@@ -1765,12 +2173,64 @@ def admin_apartments():
         debt_by_apartment_id=debt_by_apartment_id,
         buildings=buildings,
         building_filter_id=building_filter_id,
+        tariff_names_by_apartment_id=tariff_names_by_apartment_id,
+        apartments_sort=sort,
+        apartments_sort_dir=sort_dir,
+        apartments_sort_next=apartments_sort_next,
+        apartments_sort_preserve_q=apartments_sort_preserve_q,
     )
+
+
+@app.route("/admin/apartments/owner-whatsapp", methods=["POST"])
+@login_required
+@role_required("komendant", "admin")
+def admin_apartment_owner_whatsapp():
+    wa_cfg = get_whatsapp_config()
+    if not (wa_cfg.enabled and wa_cfg.api_url and wa_cfg.api_key and wa_cfg.instance):
+        flash("WhatsApp inteqrasiyası deaktiv və ya ayarları tam deyil.", "warning")
+        return _redirect_admin_apartments()
+    try:
+        uid = int(request.form.get("owner_user_id") or "0")
+    except (TypeError, ValueError):
+        flash("Yanlış istifadəçi.", "danger")
+        return _redirect_admin_apartments()
+    owner = User.query.get_or_404(uid)
+    if not owner.phone:
+        flash("Telefon nömrəsi yoxdur.", "warning")
+        return _redirect_admin_apartments()
+    if not db.session.scalar(select(exists().where(Apartment.owner_user_id == owner.id))):
+        flash("Bu istifadəçi mənzil sahibi kimi təyin edilməyib.", "danger")
+        return _redirect_admin_apartments()
+    message = (request.form.get("message") or "").strip()
+    if not message:
+        flash("Mesaj mətni boş ola bilməz.", "danger")
+        return _redirect_admin_apartments()
+    if len(message) > WA_BROADCAST_MAX_LEN:
+        flash(f"Mesaj çox uzundur (maks. {WA_BROADCAST_MAX_LEN} simvol).", "danger")
+        return _redirect_admin_apartments()
+    ok, err = wa_send_text(owner.phone, message)
+    if ok:
+        audit(f"WhatsApp fərdi mesaj göndərildi: sakin #{owner.id} ({owner.email})")
+        flash("Mesaj WhatsApp ilə göndərildi.", "success")
+    else:
+        flash(f"WhatsApp göndərilmədi: {err}", "danger")
+    return _redirect_admin_apartments()
+
+
+def _redirect_admin_apartments():
+    bid_raw = (request.form.get("building_id") or "").strip()
+    try:
+        bid = int(bid_raw) if bid_raw else None
+    except ValueError:
+        bid = None
+    if bid:
+        return redirect(url_for("admin_apartments", building_id=bid))
+    return redirect(url_for("admin_apartments"))
 
 
 @app.route("/admin/apartments/delete/<int:apartment_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def delete_apartment(apartment_id):
     apartment = Apartment.query.get_or_404(apartment_id)
     # SQLAlchemy 2.x: avoid legacy Query.count() (can raise in some setups); use EXISTS + scalar().
@@ -1817,7 +2277,7 @@ def delete_apartment(apartment_id):
 
 @app.route("/admin/apartments/update/<int:apartment_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def update_apartment(apartment_id):
     apartment = Apartment.query.get_or_404(apartment_id)
     number = request.form["number"].strip()
@@ -1867,14 +2327,15 @@ def update_apartment(apartment_id):
 
 @app.route("/admin/tariffs", methods=["GET", "POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def admin_tariffs():
     if request.method == "POST":
+        is_active = (request.form.get("is_active") or "1").strip() == "1"
         tariff = Tariff(
             name=request.form["name"].strip(),
             type=request.form["type"],
             amount=float(request.form["amount"]),
-            is_active=True,
+            is_active=is_active,
         )
         db.session.add(tariff)
         db.session.commit()
@@ -1901,7 +2362,7 @@ def admin_tariffs():
 
 @app.route("/admin/tariffs/delete/<int:tariff_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def delete_tariff(tariff_id):
     tariff = Tariff.query.get_or_404(tariff_id)
     tariff_name = tariff.name
@@ -1915,7 +2376,7 @@ def delete_tariff(tariff_id):
 
 @app.route("/admin/tariffs/update/<int:tariff_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def update_tariff(tariff_id):
     tariff = Tariff.query.get_or_404(tariff_id)
 
@@ -1960,7 +2421,7 @@ def update_tariff(tariff_id):
 
 @app.route("/admin/invoices/generate", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def generate_invoices():
     period_mode = (request.form.get("period_mode") or "current").strip().lower()
     today = date.today()
@@ -1993,7 +2454,7 @@ def generate_invoices():
         # Apply apartment credit to all unpaid invoices for the period.
         unpaid_invoices = (
             Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
-            .filter(Invoice.period == period, Invoice.status != "odenilib")
+            .filter(Invoice.period == period, Invoice.status != INVOICE_STATUS_PAID)
             .order_by(Apartment.number.asc(), Invoice.id.asc())
             .all()
         )
@@ -2053,7 +2514,7 @@ def generate_invoices():
 
 @app.route("/admin/invoices/recalculate", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def recalculate_invoices():
     period = (request.form.get("period") or "").strip()
     if not period or len(period) != 7:
@@ -2077,7 +2538,7 @@ def recalculate_invoices():
             created += 1
             continue
         inv.amount = total
-        inv.status = "odenilib" if float(inv.paid_amount or 0) >= float(inv.amount or 0) else "gozlemede"
+        inv.status = INVOICE_STATUS_PAID if float(inv.paid_amount or 0) >= float(inv.amount or 0) else "gozlemede"
         overflow = _move_invoice_overpay_to_credit(inv)
         if overflow > 0:
             audit(f"Kredit yarandi (yeniden hesabla) invoice#{inv.id}: +{overflow:.2f} AZN")
@@ -2091,7 +2552,7 @@ def recalculate_invoices():
     # partially covered by it.
     unpaid_invoices = (
         Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
-        .filter(Invoice.period == period, Invoice.status != "odenilib")
+        .filter(Invoice.period == period, Invoice.status != INVOICE_STATUS_PAID)
         .order_by(Apartment.number.asc(), Invoice.id.asc())
         .all()
     )
@@ -2107,7 +2568,7 @@ def recalculate_invoices():
 
 @app.route("/admin/expenses", methods=["GET", "POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def admin_expenses():
     if request.method == "POST":
         form_type = request.form.get("form_type", "")
@@ -2210,12 +2671,43 @@ def admin_expenses():
             return redirect(url_for("admin_expenses"))
 
     period = request.args.get("period") or date.today().strftime("%Y-%m")
-    return render_template("admin_expenses.html", **_get_admin_expenses_view_data(period))
+    sort = (request.args.get("sort") or "").strip().lower()
+    sort_dir = (request.args.get("dir") or "asc").strip().lower()
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "asc"
+    if sort not in ALLOWED_EXPENSE_SORT_KEYS:
+        sort = ""
+        sort_dir = "asc"
+
+    data = _get_admin_expenses_view_data(period)
+    expense_rows = _build_admin_expense_table_rows(
+        data["templates"],
+        data["one_off_expenses"],
+        data["template_expense_by_template_id"],
+    )
+    if sort:
+        _sort_admin_expense_table_rows(expense_rows, sort, sort_dir)
+
+    base_q = {"period": period}
+    expenses_sort_next = {}
+    for c in ("tip", "tarix", "category", "ad", "mebleg", "sablon", "odenis"):
+        q = dict(base_q)
+        if sort != c:
+            q.update(sort=c, dir="asc")
+        else:
+            q.update(sort=c, dir=("desc" if sort_dir == "asc" else "asc"))
+        expenses_sort_next[c] = q
+
+    data["expense_rows"] = expense_rows
+    data["expenses_sort"] = sort
+    data["expenses_sort_dir"] = sort_dir
+    data["expenses_sort_next"] = expenses_sort_next
+    return render_template("admin_expenses.html", **data)
 
 
 @app.route("/admin/expenses/update/<int:expense_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def update_expense(expense_id):
     e = Expense.query.get_or_404(expense_id)
     period = (request.form.get("period", "") or "").strip()
@@ -2274,7 +2766,7 @@ def update_expense(expense_id):
 
 @app.route("/admin/expenses/delete/<int:expense_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def delete_expense(expense_id):
     e = Expense.query.get_or_404(expense_id)
     period = e.period
@@ -2288,7 +2780,7 @@ def delete_expense(expense_id):
 
 @app.route("/admin/expenses/toggle-paid/<int:expense_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def toggle_expense_paid(expense_id):
     e = Expense.query.get_or_404(expense_id)
     e.is_paid = not bool(e.is_paid)
@@ -2301,7 +2793,7 @@ def toggle_expense_paid(expense_id):
 
 @app.route("/admin/invoices")
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def admin_invoices():
     selected_period = (request.args.get("period", "") or "").strip()
     building_id_raw = (request.args.get("building_id") or "").strip()
@@ -2309,74 +2801,9 @@ def admin_invoices():
     return render_template("admin_invoices.html", **_get_admin_invoices_view_data(selected_period, building_id))
 
 
-@app.route("/admin/payments/confirm/<int:payment_id>", methods=["POST"])
-@login_required
-@role_required("komendant", "superadmin")
-def confirm_payment(payment_id):
-    payment = Payment.query.get_or_404(payment_id)
-    if payment.status != "pending":
-        flash("Bu muraciet artiq emal olunub.", "warning")
-        period = (request.form.get("period", "") or "").strip()
-        return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
-
-    invoice = payment.invoice
-    apply_amount = float(payment.amount)
-
-    # FIX (warning #1): wrap the mutable operations and the status change in a
-    # try/except so that a mid-flight exception cannot leave the in-memory
-    # objects mutated without a matching DB commit.
-    try:
-        result = _apply_payment_delta(invoice, apply_amount)
-        payment.status = "confirmed"
-        payment.reviewer_user_id = current_user().id
-        payment.reviewed_at = datetime.now(timezone.utc)
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        flash("Xəta baş verdi. Ödəniş təsdiqlənmədi.", "danger")
-        period = (request.form.get("period", "") or "").strip()
-        return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
-
-    moved = float(result.get("moved_to_credit") or 0)
-    removed = float(result.get("removed_from_credit") or 0)
-    if moved > 0:
-        audit(f"Odenis tesdiqlendi #{payment.id} {apply_amount:.2f} AZN (kredit +{moved:.2f})")
-    elif removed > 0:
-        audit(f"Odenis tesdiqlendi #{payment.id} {apply_amount:.2f} AZN (kredit -{removed:.2f})")
-    else:
-        audit(f"Odenis tesdiqlendi #{payment.id} {apply_amount:.2f} AZN")
-    resident = invoice.apartment.owner
-    if resident and resident.email:
-        cfg = get_smtp_config()
-        subject, body, html_body = build_receipt_email(payment, cfg)
-        send_email(subject, body, [resident.email], html_body=html_body)
-    flash("Odenis tesdiqlendi.", "success")
-    period = (request.form.get("period", "") or "").strip()
-    return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
-
-
-@app.route("/admin/payments/reject/<int:payment_id>", methods=["POST"])
-@login_required
-@role_required("komendant", "superadmin")
-def reject_payment(payment_id):
-    payment = Payment.query.get_or_404(payment_id)
-    if payment.status != "pending":
-        flash("Bu muraciet artiq emal olunub.", "warning")
-        period = (request.form.get("period", "") or "").strip()
-        return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
-
-    payment.status = "rejected"
-    payment.reviewer_user_id = current_user().id
-    payment.reviewed_at = datetime.now(timezone.utc)
-    db.session.commit()
-    audit(f"Odenis imtina edildi #{payment.id}")
-    flash("Odenis muracieti imtina edildi.", "warning")
-    period = (request.form.get("period", "") or "").strip()
-    return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
-
 @app.route("/admin/payments/add/<int:invoice_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def add_payment(invoice_id):
     invoice = Invoice.query.get_or_404(invoice_id)
     try:
@@ -2395,7 +2822,8 @@ def add_payment(invoice_id):
     apply_amount = amount
     now = datetime.now(timezone.utc)
 
-    # FIX (warning #1): same try/except guard as confirm_payment.
+    # Оборачиваем мутацию баланса + создание Payment в общий try/except,
+    # чтобы исключение не оставило in-memory объекты изменёнными без коммита.
     try:
         result = _apply_payment_delta(
             invoice, apply_amount, debt_adjustment=(apply_amount < 0)
@@ -2406,7 +2834,6 @@ def add_payment(invoice_id):
             comment=comment,
             status="confirmed",
             reviewer_user_id=current_user().id,
-            reviewed_at=now,
             created_at=now,
         )
         db.session.add(payment)
@@ -2430,6 +2857,7 @@ def add_payment(invoice_id):
         cfg = get_smtp_config()
         subject, body, html_body = build_receipt_email(payment, cfg)
         send_email(subject, body, [resident.email], html_body=html_body)
+    maybe_enqueue_payment_receipt_whatsapp(payment)
     flash("Odenis daxil edildi.", "success")
     period = (request.form.get("period", "") or "").strip()
     return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
@@ -2437,7 +2865,7 @@ def add_payment(invoice_id):
 
 @app.route("/admin/history")
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def admin_history():
     selected_month = (request.args.get("month") or "").strip()
     building_id_raw = (request.args.get("building_id") or "").strip()
@@ -2493,6 +2921,100 @@ def _build_xlsx(title: str, headers: list[str], rows: list[list[str]]) -> BytesI
     return buffer
 
 
+ALLOWED_EXPENSE_SORT_KEYS = frozenset({"tip", "tarix", "category", "ad", "mebleg", "sablon", "odenis"})
+
+
+def _build_admin_expense_table_rows(templates, one_off_expenses, template_expense_by_template_id):
+    rows = []
+    for t in templates:
+        rows.append({"kind": "template", "template": t, "expense": template_expense_by_template_id.get(t.id)})
+    for e in one_off_expenses:
+        rows.append({"kind": "one_off", "template": None, "expense": e})
+    return rows
+
+
+def _expense_row_stable_tie(row) -> tuple:
+    if row["kind"] == "template":
+        ex = row["expense"]
+        return (0, row["template"].id, ex.id if ex else 0)
+    return (1, row["expense"].id, 0)
+
+
+def _normalize_expense_sort_dt(dt):
+    if dt is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _sort_admin_expense_table_rows(rows: list, sort_col: str, sort_dir: str) -> None:
+    if sort_col not in ALLOWED_EXPENSE_SORT_KEYS:
+        return
+    reverse = sort_dir == "desc"
+    tie = _expense_row_stable_tie
+
+    def key_tip(r):
+        return ((0 if r["kind"] == "template" else 1,) + tie(r))
+
+    def key_tarix(r):
+        if r["kind"] == "template":
+            dt = r["template"].created_at
+        else:
+            dt = r["expense"].created_at
+        return (_normalize_expense_sort_dt(dt),) + tie(r)
+
+    def key_category(r):
+        if r["kind"] == "template":
+            cat = (r["template"].category or "").strip().lower()
+        else:
+            cat = (r["expense"].category or "").strip().lower()
+        return (cat,) + tie(r)
+
+    def key_ad(r):
+        if r["kind"] == "template":
+            name = (r["template"].name or "").strip().lower()
+        else:
+            name = (r["expense"].name or "").strip().lower()
+        return (name,) + tie(r)
+
+    def key_mebleg(r):
+        if r["kind"] == "template":
+            t = r["template"]
+            ex = r["expense"]
+            amt = float(ex.amount) if ex else float(t.default_amount or 0)
+        else:
+            amt = float(r["expense"].amount or 0)
+        return (amt,) + tie(r)
+
+    def key_sablon(r):
+        if r["kind"] == "template":
+            t = r["template"]
+            return (0, 0 if t.is_active else 1, (t.name or "").lower()) + tie(r)
+        return (1, 0, "") + tie(r)
+
+    def key_odenis(r):
+        if r["kind"] == "template":
+            ex = r["expense"]
+            if not ex:
+                return (2, 0) + tie(r)
+            return (0 if ex.is_paid else 1, ex.id) + tie(r)
+        e = r["expense"]
+        return (0 if e.is_paid else 1, e.id) + tie(r)
+
+    key_fn = {
+        "tip": key_tip,
+        "tarix": key_tarix,
+        "category": key_category,
+        "ad": key_ad,
+        "mebleg": key_mebleg,
+        "sablon": key_sablon,
+        "odenis": key_odenis,
+    }.get(sort_col)
+    if key_fn:
+        rows.sort(key=key_fn, reverse=reverse)
+
+
 def _get_admin_expenses_view_data(period: str):
     templates = ExpenseTemplate.query.order_by(ExpenseTemplate.is_active.desc(), ExpenseTemplate.name.asc()).all()
     expenses = Expense.query.filter_by(period=period).order_by(Expense.created_at.desc()).all()
@@ -2525,7 +3047,14 @@ def _get_admin_invoices_view_data(selected_period: str, building_id: Optional[in
         selected_period = available_periods[0] if available_periods else ""
 
     apartment_number_sort = db.cast(Apartment.number, db.Integer)
-    invoices_query = Invoice.query.join(Apartment, Invoice.apartment_id == Apartment.id)
+    invoices_query = (
+        Invoice.query.options(
+            joinedload(Invoice.payments),
+            joinedload(Invoice.apartment).joinedload(Apartment.owner),
+            joinedload(Invoice.apartment).joinedload(Apartment.building),
+        )
+        .join(Apartment, Invoice.apartment_id == Apartment.id)
+    )
     if selected_period:
         invoices_query = invoices_query.filter(Invoice.period == selected_period)
     if building_id:
@@ -2535,12 +3064,21 @@ def _get_admin_invoices_view_data(selected_period: str, building_id: Optional[in
 
     dirty = False
     for inv in invoices:
-        expected = "odenilib" if float(inv.paid_amount or 0) >= float(inv.amount or 0) else "gozlemede"
+        expected = INVOICE_STATUS_PAID if float(inv.paid_amount or 0) >= float(inv.amount or 0) else "gozlemede"
         if inv.status != expected:
             inv.status = expected
             dirty = True
     if dirty:
         db.session.commit()
+
+    n_inv = len(invoices)
+    if n_inv > 0:
+        paid_n = sum(1 for inv in invoices if float(inv.paid_amount or 0) >= float(inv.amount or 0))
+        period_apartments_paid_pct = round(100.0 * paid_n / float(n_inv), 1)
+        period_apartments_late_pct = round(100.0 * (n_inv - paid_n) / float(n_inv), 1)
+    else:
+        period_apartments_paid_pct = 0.0
+        period_apartments_late_pct = 0.0
 
     prev_period = None
     next_period = None
@@ -2559,6 +3097,8 @@ def _get_admin_invoices_view_data(selected_period: str, building_id: Optional[in
         "next_period": next_period,
         "building_id": building_id,
         "buildings_all": Building.query.order_by(Building.name.asc()).all(),
+        "period_apartments_paid_pct": period_apartments_paid_pct,
+        "period_apartments_late_pct": period_apartments_late_pct,
     }
 
 
@@ -2754,7 +3294,7 @@ def _get_admin_payments_report_view_data(from_period: str, to_period: str, apart
 
 @app.route("/admin/payments-report")
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def admin_payments_report():
     # Payments per apartment per month (confirmed payments).
     today = date.today()
@@ -2773,7 +3313,7 @@ def admin_payments_report():
 
 @app.route("/admin/export/payments-report/xlsx")
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def export_payments_report():
     today = date.today()
     default_to = today.strftime("%Y-%m")
@@ -2797,7 +3337,7 @@ def export_payments_report():
 
 @app.route("/admin/export/expenses/xlsx")
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def export_expenses():
     period = (request.args.get("period") or date.today().strftime("%Y-%m")).strip()
     data = _get_admin_expenses_view_data(period)
@@ -2809,7 +3349,7 @@ def export_expenses():
             e.category or "",
             e.name,
             _amount_to_text(e.amount),
-            "Ödənilib" if e.is_paid else "Gözləmədə",
+            "ödənilib" if e.is_paid else "gözləmədə",
         ]
         for e in data["expenses"]
     ]
@@ -2822,13 +3362,13 @@ def export_expenses():
 
 @app.route("/admin/export/invoices/xlsx")
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def export_invoices():
     selected_period = (request.args.get("period", "") or "").strip()
     building_id_raw = (request.args.get("building_id") or "").strip()
     building_id = int(building_id_raw) if building_id_raw.isdigit() else None
     data = _get_admin_invoices_view_data(selected_period, building_id)
-    headers = ["Korpus", "Mənzil", "Period", "Hesablanıb", "Ödənilib", "Balans", "Status"]
+    headers = ["Korpus", "Mənzil", "Period", "Hesablanıb", "ödənilib", "Balans", "Status"]
     rows = []
     for i in data["invoices"]:
         balance = float(i.paid_amount or 0) - float(i.amount or 0)
@@ -2852,7 +3392,7 @@ def export_invoices():
 
 @app.route("/admin/export/history/xlsx")
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def export_history():
     selected_month = (request.args.get("month") or "").strip()
     building_id_raw = (request.args.get("building_id") or "").strip()
@@ -2864,7 +3404,7 @@ def export_history():
         event_type = "Ödəniş" if e["type"] == "payment" else ("Mədaxil" if e["type"] == "topup" else "Xərc")
         status = "-"
         if e["type"] == "expense":
-            status = "Ödənilib" if e.get("paid") else "Gözləmədə"
+            status = "ödənilib" if e.get("paid") else "gözləmədə"
         rows.append(
             [
                 e["dt"].strftime("%d.%m.%Y %H:%M") if e.get("dt") else "",
@@ -2886,9 +3426,35 @@ def _render_print_report(title: str, headers: list[str], rows: list[list[str]]):
     return render_template("admin_report_print.html", title=title, headers=headers, rows=rows)
 
 
+def _render_invoice_print(invoice: Invoice, *, staff_send_channels: bool):
+    """Общий helper печати инвойса для admin/komendant и резидента."""
+    cfg = get_smtp_config()
+    return render_template(
+        "invoice_print.html",
+        invoice=invoice,
+        resident=invoice.apartment.owner,
+        cfg=cfg,
+        system_name=(cfg.system_name or "").strip() or "eMTK",
+        issue_date=utc_to_local(invoice.created_at),
+        staff_send_channels=staff_send_channels,
+    )
+
+
+def _render_payment_receipt(payment: Payment, *, staff_send_channels: bool):
+    """Общий helper печати квитанции для admin/komendant и резидента."""
+    cfg = get_smtp_config()
+    return render_template(
+        "receipt.html",
+        payment=payment,
+        cfg=cfg,
+        system_name=(cfg.system_name or "").strip() or "eMTK",
+        staff_send_channels=staff_send_channels,
+    )
+
+
 @app.route("/admin/print/payments-report")
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def print_payments_report():
     today = date.today()
     default_to = today.strftime("%Y-%m")
@@ -2906,7 +3472,7 @@ def print_payments_report():
 
 @app.route("/admin/print/expenses")
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def print_expenses():
     period = (request.args.get("period") or date.today().strftime("%Y-%m")).strip()
     data = _get_admin_expenses_view_data(period)
@@ -2918,7 +3484,7 @@ def print_expenses():
             e.category or "",
             e.name,
             _amount_to_text(e.amount),
-            "Ödənilib" if e.is_paid else "Gözləmədə",
+            "ödənilib" if e.is_paid else "gözləmədə",
         ]
         for e in data["expenses"]
     ]
@@ -2928,13 +3494,13 @@ def print_expenses():
 
 @app.route("/admin/print/invoices")
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def print_invoices():
     selected_period = (request.args.get("period", "") or "").strip()
     building_id_raw = (request.args.get("building_id") or "").strip()
     building_id = int(building_id_raw) if building_id_raw.isdigit() else None
     data = _get_admin_invoices_view_data(selected_period, building_id)
-    headers = ["Korpus", "Mənzil", "Period", "Hesablanıb", "Ödənilib", "Balans", "Status"]
+    headers = ["Korpus", "Mənzil", "Period", "Hesablanıb", "ödənilib", "Balans", "Status"]
     rows = []
     for i in data["invoices"]:
         balance = float(i.paid_amount or 0) - float(i.amount or 0)
@@ -2954,7 +3520,7 @@ def print_invoices():
 
 @app.route("/admin/print/history")
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def print_history():
     selected_month = (request.args.get("month") or "").strip()
     building_id_raw = (request.args.get("building_id") or "").strip()
@@ -2966,7 +3532,7 @@ def print_history():
         event_type = "Ödəniş" if e["type"] == "payment" else ("Mədaxil" if e["type"] == "topup" else "Xərc")
         status = "-"
         if e["type"] == "expense":
-            status = "Ödənilib" if e.get("paid") else "Gözləmədə"
+            status = "ödənilib" if e.get("paid") else "gözləmədə"
         rows.append(
             [
                 e["dt"].strftime("%d.%m.%Y %H:%M") if e.get("dt") else "",
@@ -2990,7 +3556,7 @@ def resident_receipt(payment_id):
     if payment.invoice.apartment.owner_user_id != user.id:
         flash("Qəbzə giriş mümkün deyil.", "danger")
         return redirect(url_for("dashboard"))
-    return render_template("receipt.html", payment=payment)
+    return _render_payment_receipt(payment, staff_send_channels=False)
 
 
 @app.route("/resident/invoice/<int:invoice_id>")
@@ -3003,20 +3569,12 @@ def resident_invoice_print(invoice_id):
     if invoice.apartment.owner_user_id != user.id:
         flash("Hesab-fakturaya giriş mümkün deyil.", "danger")
         return redirect(url_for("dashboard"))
-    cfg = get_smtp_config()
-    return render_template(
-        "invoice_print.html",
-        invoice=invoice,
-        resident=invoice.apartment.owner,
-        cfg=cfg,
-        system_name=(cfg.system_name or "").strip() or "eMTK",
-        issue_date=utc_to_local(invoice.created_at),
-    )
+    return _render_invoice_print(invoice, staff_send_channels=False)
 
 
 @app.route("/admin/content", methods=["GET", "POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def admin_content():
     content_type = request.args.get("type", "work")
     if request.method == "POST":
@@ -3052,12 +3610,24 @@ def admin_content():
 
     works = WorkLog.query.order_by(WorkLog.created_at.desc()).all()
     announcements = Announcement.query.order_by(Announcement.created_at.desc()).all()
-    return render_template("admin_content.html", works=works, announcements=announcements, content_type=content_type)
+    residents_for_wa = (
+        User.query.options(joinedload(User.apartments).joinedload(Apartment.building))
+        .filter_by(role="resident")
+        .order_by(User.full_name.asc())
+        .all()
+    )
+    return render_template(
+        "admin_content.html",
+        works=works,
+        announcements=announcements,
+        content_type=content_type,
+        residents_for_wa=residents_for_wa,
+    )
 
 
 @app.route("/admin/announcements/update/<int:announcement_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def update_announcement(announcement_id):
     announcement = Announcement.query.get_or_404(announcement_id)
     announcement.title = request.form["title"].strip()
@@ -3070,7 +3640,7 @@ def update_announcement(announcement_id):
 
 @app.route("/admin/announcements/delete/<int:announcement_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def delete_announcement(announcement_id):
     announcement = Announcement.query.get_or_404(announcement_id)
     db.session.delete(announcement)
@@ -3082,7 +3652,7 @@ def delete_announcement(announcement_id):
 
 @app.route("/admin/worklogs/update/<int:worklog_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def update_worklog(worklog_id):
     w = WorkLog.query.get_or_404(worklog_id)
     w.title = request.form["title"].strip()
@@ -3103,7 +3673,7 @@ def update_worklog(worklog_id):
 
 @app.route("/admin/worklogs/delete/<int:worklog_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def delete_worklog(worklog_id):
     w = WorkLog.query.get_or_404(worklog_id)
     db.session.delete(w)
@@ -3113,17 +3683,166 @@ def delete_worklog(worklog_id):
     return redirect(url_for("admin_content", type="work"))
 
 
+@app.route("/admin/content/whatsapp-broadcast", methods=["POST"])
+@login_required
+@role_required("komendant", "admin")
+def admin_whatsapp_broadcast():
+    wa_cfg = get_whatsapp_config()
+    if not (wa_cfg.enabled and wa_cfg.api_url and wa_cfg.api_key and wa_cfg.instance):
+        flash("WhatsApp inteqrasiyası deaktivdir və ya ayarlar tam deyil.", "warning")
+        return redirect(url_for("admin_content"))
+    scope = (request.form.get("scope") or "bulk").strip().lower()
+    message = (request.form.get("message") or "").strip()
+    if not message:
+        flash("Mesaj mətni boş ola bilməz.", "danger")
+        return redirect(url_for("admin_content"))
+    if scope == "target":
+        raw_ids = request.form.getlist("user_ids")
+        uid_list: list[int] = []
+        for x in raw_ids:
+            try:
+                uid_list.append(int(x))
+            except (TypeError, ValueError):
+                continue
+        if not uid_list:
+            flash("Ən azı bir sakin seçin.", "danger")
+            return redirect(url_for("admin_content"))
+        users = User.query.filter(User.id.in_(uid_list), User.role == "resident").all()
+    else:
+        users = User.query.filter_by(role="resident").all()
+    enq, skip = wa_broadcast_enqueue(users, message)
+    try:
+        wa_queue_drain_once()
+    except Exception:
+        pass
+    audit(f"WhatsApp mesaj növbəsi: scope={scope}, queued={enq}, no_phone={skip}")
+    if enq:
+        flash(
+            f"{enq} alıcı növbəyə əlavə edildi. Telefonu olmayan / təkrar nömrə: {skip}. "
+            f"Limit: {wa_cfg.bulk_limit} mesaj / {wa_cfg.bulk_window_sec} san — qalanlar avtomatik göndəriləcək.",
+            "success",
+        )
+    else:
+        flash("Heç bir alıcı növbəyə düşmədi (telefon yoxdur və ya mətn boşdur).", "warning")
+    return redirect(url_for("admin_content"))
+
+
+@app.route("/admin/content/whatsapp-from-item", methods=["POST"])
+@login_required
+@role_required("komendant", "admin")
+def admin_whatsapp_from_item():
+    wa_cfg = get_whatsapp_config()
+    if not (wa_cfg.enabled and wa_cfg.api_url and wa_cfg.api_key and wa_cfg.instance):
+        flash("WhatsApp inteqrasiyası deaktivdir və ya ayarlar tam deyil.", "warning")
+        return redirect(url_for("admin_content"))
+    kind = (request.form.get("kind") or "").strip().lower()
+    scope = (request.form.get("scope") or "bulk").strip().lower()
+    try:
+        item_id = int(request.form.get("item_id") or "0")
+    except (TypeError, ValueError):
+        flash("Yanlış identifikator.", "danger")
+        return redirect(url_for("admin_content"))
+    smtp = get_smtp_config()
+    if kind == "work":
+        w = WorkLog.query.get_or_404(item_id)
+        text = build_whatsapp_content_broadcast_text("is", w.title, w.description, smtp)
+        redir_type = "work"
+    elif kind == "announcement":
+        a = Announcement.query.get_or_404(item_id)
+        text = build_whatsapp_content_broadcast_text("elan", a.title, a.text, smtp)
+        redir_type = "announcement"
+    else:
+        flash("Yanlış növ.", "danger")
+        return redirect(url_for("admin_content"))
+    if scope == "target":
+        raw_ids = request.form.getlist("user_ids")
+        uid_list: list[int] = []
+        for x in raw_ids:
+            try:
+                uid_list.append(int(x))
+            except (TypeError, ValueError):
+                continue
+        if not uid_list:
+            flash("Ən azı bir sakin seçin.", "danger")
+            return redirect(url_for("admin_content", type=redir_type))
+        users = User.query.filter(User.id.in_(uid_list), User.role == "resident").all()
+    else:
+        users = User.query.filter_by(role="resident").all()
+    enq, skip = wa_broadcast_enqueue(users, text)
+    try:
+        wa_queue_drain_once()
+    except Exception:
+        pass
+    audit(f"WhatsApp elan/is #{item_id} ({kind}): queued={enq}, scope={scope}")
+    if enq:
+        flash(
+            f"{enq} alıcı növbəyə əlavə edildi. Telefonu olmayan: {skip}.",
+            "success",
+        )
+    else:
+        flash("Heç bir alıcı növbəyə düşmədi.", "warning")
+    return redirect(url_for("admin_content", type=redir_type))
+
+
 @app.route("/admin/users")
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def admin_users():
-    users = User.query.order_by(User.id.desc()).all()
-    return render_template("admin_users.html", users=users)
+    sort = (request.args.get("sort") or "name").strip().lower()
+    sort_dir = (request.args.get("dir") or "asc").strip().lower()
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "asc"
+    allowed_sorts = ("id", "name", "apartment", "phone", "email", "role", "wa")
+    if sort not in allowed_sorts:
+        sort = "name"
+        sort_dir = "asc"
+
+    users = User.query.options(joinedload(User.apartments).joinedload(Apartment.building)).all()
+    for u in users:
+        u.apartments.sort(key=_apartment_row_sort_key)
+
+    reverse = sort_dir == "desc"
+
+    if sort == "id":
+        users.sort(key=lambda u: u.id, reverse=reverse)
+    elif sort == "name":
+        users.sort(key=lambda u: ((u.full_name or "").lower(), u.id), reverse=reverse)
+    elif sort == "phone":
+        users.sort(key=lambda u: ((u.phone or "").lower(), u.id), reverse=reverse)
+    elif sort == "email":
+        users.sort(key=lambda u: ((u.email or "").lower(), u.id), reverse=reverse)
+    elif sort == "role":
+        users.sort(key=lambda u: ((u.role or "").lower(), u.id), reverse=reverse)
+    elif sort == "wa":
+        users.sort(key=lambda u: ((1 if u.whatsapp_connected else 0), u.id), reverse=reverse)
+    elif sort == "apartment":
+        def _user_apt_sort_key(u: User):
+            if not u.apartments:
+                return (1, "", 0, 10**9, "", u.id)
+            b_name, b_id, n, tail = _apartment_row_sort_key(u.apartments[0])
+            return (0, b_name, b_id, n, tail, u.id)
+
+        users.sort(key=_user_apt_sort_key, reverse=reverse)
+
+    users_sort_next = {}
+    for c in allowed_sorts:
+        if sort != c:
+            users_sort_next[c] = {"sort": c, "dir": "asc"}
+        else:
+            users_sort_next[c] = {"sort": c, "dir": ("desc" if sort_dir == "asc" else "asc")}
+
+    return render_template(
+        "admin_users.html",
+        users=users,
+        users_sort=sort,
+        users_sort_dir=sort_dir,
+        users_sort_next=users_sort_next,
+    )
 
 
 @app.route("/admin/users/create", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def admin_user_create():
     full_name = (request.form.get("full_name") or "").strip()
     phone = (request.form.get("phone") or "").strip() or None
@@ -3139,12 +3858,14 @@ def admin_user_create():
         return redirect(url_for("admin_users"))
     if role == "commandant":
         role = "komendant"
-    if role not in ("resident", "komendant", "superadmin"):
+    if role == "superadmin":
+        role = "admin"
+    if role not in ("resident", "komendant", "admin"):
         flash("Rol duzgun deyil.", "danger")
         return redirect(url_for("admin_users"))
     me = current_user()
-    if role == "superadmin" and (not me or me.role != "superadmin"):
-        flash("Yalnız superadmin superadmin yarada bilər.", "danger")
+    if role == "admin" and (not me or me.role != "admin"):
+        flash("Yalnız admin admin yarada bilər.", "danger")
         return redirect(url_for("admin_users"))
     if User.query.filter_by(email=email).first():
         flash("Bu email ile artiq istifadəçi var.", "warning")
@@ -3167,7 +3888,7 @@ def admin_user_create():
 
 @app.route("/admin/users/update/<int:user_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def admin_user_update(user_id):
     target = User.query.get_or_404(user_id)
 
@@ -3185,14 +3906,14 @@ def admin_user_update(user_id):
         return redirect(url_for("admin_users"))
     if role == "commandant":
         role = "komendant"
-    if role not in ("resident", "komendant", "superadmin"):
+    if role == "superadmin":
+        role = "admin"
+    if role not in ("resident", "komendant", "admin"):
         flash("Rol duzgun deyil.", "danger")
         return redirect(url_for("admin_users"))
     me = current_user()
-    if (not me or me.role != "superadmin") and (
-        target.role == "superadmin" or role == "superadmin"
-    ):
-        flash("Superadmin hesablarını yalnız superadmin idarə edə bilər.", "danger")
+    if (not me or me.role != "admin") and (target.role == "admin" or role == "admin"):
+        flash("Admin hesablarını yalnız admin idarə edə bilər.", "danger")
         return redirect(url_for("admin_users"))
     duplicate = User.query.filter(User.email == email, User.id != target.id).first()
     if duplicate:
@@ -3200,7 +3921,7 @@ def admin_user_update(user_id):
         return redirect(url_for("admin_users"))
 
     # Prevent self-demoting to resident (locks admin out).
-    if me and me.id == target.id and target.role in ("komendant", "superadmin") and role == "resident":
+    if me and me.id == target.id and target.role in ("komendant", "admin") and role == "resident":
         flash("Öz rolunuzu resident edə bilməzsiniz.", "warning")
         return redirect(url_for("admin_users"))
 
@@ -3219,15 +3940,15 @@ def admin_user_update(user_id):
 
 @app.route("/admin/users/delete/<int:user_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def admin_user_delete(user_id):
     target = User.query.get_or_404(user_id)
     me = current_user()
     if me and me.id == target.id:
         flash("Özünüzü silə bilməzsiniz.", "warning")
         return redirect(url_for("admin_users"))
-    if me and me.role != "superadmin" and target.role == "superadmin":
-        flash("Superadmin hesabını yalnız superadmin silə bilər.", "danger")
+    if me and me.role != "admin" and target.role == "admin":
+        flash("Admin hesabını yalnız admin silə bilər.", "danger")
         return redirect(url_for("admin_users"))
 
     has_apartments = Apartment.query.filter_by(owner_user_id=target.id).first() is not None
@@ -3256,32 +3977,102 @@ def polls():
     return redirect(url_for("dashboard"))
 
 
+def _redirect_after_invoice_staff_send(invoice: Invoice):
+    """Return to print view when sending from invoice_print.html (stay_on_print=1)."""
+    if request.form.get("stay_on_print") == "1":
+        return redirect(url_for("print_invoice", invoice_id=invoice.id))
+    return redirect(url_for("admin_invoices"))
+
+
+def _redirect_after_payment_receipt_staff_send(payment: Payment):
+    if request.form.get("stay_on_print") == "1":
+        return redirect(url_for("print_payment_receipt", payment_id=payment.id))
+    period = (request.form.get("period") or "").strip()
+    bid = (request.form.get("building_id") or "").strip()
+    return redirect(url_for("admin_invoices", period=period or payment.invoice.period, building_id=bid or None))
+
+
 @app.route("/admin/invoices/send/<int:invoice_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def send_invoice_email(invoice_id):
     invoice = Invoice.query.get_or_404(invoice_id)
     resident = invoice.apartment.owner
     if not resident.email:
         flash("Sakinin email adresi yoxdur.", "warning")
-        return redirect(url_for("admin_invoices"))
+        return _redirect_after_invoice_staff_send(invoice)
     cfg = get_smtp_config()
     subject, body, html_body = build_invoice_email(invoice, resident, cfg)
     if send_email(subject, body, [resident.email], html_body=html_body):
         flash("Hesab-faktura email ilə göndərildi.", "success")
     else:
         flash("Email gonderilemedi. SMTP ayarlarini yoxlayin.", "danger")
-    return redirect(url_for("admin_invoices"))
+    return _redirect_after_invoice_staff_send(invoice)
+
+
+@app.route("/admin/payments/send-email/<int:payment_id>", methods=["POST"])
+@login_required
+@role_required("komendant", "admin")
+def send_payment_receipt_email(payment_id):
+    payment = Payment.query.get_or_404(payment_id)
+    invoice = payment.invoice
+    resident = invoice.apartment.owner if invoice and invoice.apartment else None
+    if not resident or not resident.email:
+        flash("Sakinin email adresi yoxdur.", "warning")
+        return _redirect_after_payment_receipt_staff_send(payment)
+    cfg = get_smtp_config()
+    subject, body, html_body = build_receipt_email(payment, cfg)
+    if send_email(subject, body, [resident.email], html_body=html_body):
+        flash("Qəbz email ilə göndərildi.", "success")
+    else:
+        flash("Email gonderilemedi. SMTP ayarlarini yoxlayin.", "danger")
+    return _redirect_after_payment_receipt_staff_send(payment)
+
+
+@app.route("/admin/payments/whatsapp/<int:payment_id>", methods=["POST"])
+@login_required
+@role_required("komendant", "admin")
+def send_payment_receipt_whatsapp(payment_id):
+    payment = Payment.query.get_or_404(payment_id)
+    if (payment.status or "") != "confirmed":
+        flash("Yalnız təsdiqlənmiş ödəniş üçün qəbz göndərilə bilər.", "warning")
+        return _redirect_after_payment_receipt_staff_send(payment)
+    invoice = payment.invoice
+    resident = invoice.apartment.owner if invoice and invoice.apartment else None
+    if not resident or not resident.phone:
+        flash("Sakinin telefon nömrəsi yoxdur.", "warning")
+        return _redirect_after_payment_receipt_staff_send(payment)
+    wa_cfg = get_whatsapp_config()
+    if not (wa_cfg.enabled and wa_cfg.api_url and wa_cfg.api_key and wa_cfg.instance):
+        flash("WhatsApp inteqrasiyası deaktiv və ya ayarları tam deyil.", "warning")
+        return _redirect_after_payment_receipt_staff_send(payment)
+    smtp_cfg = get_smtp_config()
+    text = build_whatsapp_receipt_text(payment, smtp_cfg)
+    ok, err = wa_send_text(resident.phone, text)
+    if ok:
+        audit(f"Ödəniş qəbzi #{payment.id} WhatsApp ilə göndərildi ({resident.phone})")
+        flash("Qəbz WhatsApp ilə göndərildi.", "success")
+    else:
+        flash(f"WhatsApp göndərilmədi: {err}", "danger")
+    return _redirect_after_payment_receipt_staff_send(payment)
 
 
 @app.route("/admin/invoices/whatsapp/<int:invoice_id>", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def send_invoice_whatsapp(invoice_id):
     invoice = Invoice.query.get_or_404(invoice_id)
     resident = invoice.apartment.owner
     if not resident or not resident.phone:
         flash("Sakinin telefon nömrəsi yoxdur.", "warning")
+        if request.form.get("stay_on_print") == "1":
+            return redirect(url_for("print_invoice", invoice_id=invoice.id))
+        return redirect(url_for("admin_invoices"))
+    wa_cfg = get_whatsapp_config()
+    if not (wa_cfg.enabled and wa_cfg.api_url and wa_cfg.api_key and wa_cfg.instance):
+        flash("WhatsApp inteqrasiyası deaktiv və ya ayarları tam deyil.", "warning")
+        if request.form.get("stay_on_print") == "1":
+            return redirect(url_for("print_invoice", invoice_id=invoice.id))
         return redirect(url_for("admin_invoices"))
     smtp_cfg = get_smtp_config()
     text = build_whatsapp_invoice_text(invoice, resident, smtp_cfg)
@@ -3291,12 +4082,14 @@ def send_invoice_whatsapp(invoice_id):
         flash("Hesab-faktura WhatsApp ilə göndərildi.", "success")
     else:
         flash(f"WhatsApp göndərilmədi: {err}", "danger")
+    if request.form.get("stay_on_print") == "1":
+        return redirect(url_for("print_invoice", invoice_id=invoice.id))
     return redirect(url_for("admin_invoices", period=invoice.period))
 
 
 @app.route("/admin/invoices/whatsapp/bulk", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def send_invoices_whatsapp_bulk():
     wa_cfg = get_whatsapp_config()
     if not wa_cfg.enabled:
@@ -3342,7 +4135,7 @@ def send_invoices_whatsapp_bulk():
 
 @app.route("/admin/invoices/email/bulk", methods=["POST"])
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def send_invoices_email_bulk():
     period = (request.form.get("period") or "").strip()
     building_id_raw = request.form.get("building_id")
@@ -3402,23 +4195,29 @@ def send_invoices_email_bulk():
 
 @app.route("/admin/invoices/print/<int:invoice_id>")
 @login_required
-@role_required("komendant", "superadmin")
+@role_required("komendant", "admin")
 def print_invoice(invoice_id):
-    invoice = Invoice.query.get_or_404(invoice_id)
-    cfg = get_smtp_config()
-    return render_template(
-        "invoice_print.html",
-        invoice=invoice,
-        resident=invoice.apartment.owner,
-        cfg=cfg,
-        system_name=(cfg.system_name or "").strip() or "eMTK",
-        issue_date=utc_to_local(invoice.created_at),
+    invoice = Invoice.query.options(joinedload(Invoice.apartment).joinedload(Apartment.owner)).get_or_404(invoice_id)
+    return _render_invoice_print(invoice, staff_send_channels=True)
+
+
+@app.route("/admin/payments/print/<int:payment_id>")
+@login_required
+@role_required("komendant", "admin")
+def print_payment_receipt(payment_id):
+    payment = (
+        Payment.query.options(
+            joinedload(Payment.invoice).joinedload(Invoice.apartment).joinedload(Apartment.owner)
+        )
+        .filter_by(id=payment_id)
+        .first_or_404()
     )
+    return _render_payment_receipt(payment, staff_send_channels=True)
 
 
 @app.route("/admin/settings", methods=["GET", "POST"])
 @login_required
-@role_required("superadmin", "komendant")
+@role_required("admin", "komendant")
 def admin_settings():
     cfg = get_smtp_config()
     if request.method == "POST":
@@ -3428,8 +4227,13 @@ def admin_settings():
             cfg.house_address = request.form.get("house_address", "").strip() or None
             cfg.commandant_name = request.form.get("commandant_name", "").strip() or None
             cfg.contact_phone = request.form.get("contact_phone", "").strip() or None
-            # Portal URL меняет только суперадмин.
-            if session.get("role") == "superadmin":
+            wg_raw = (request.form.get("whatsapp_group_url", "") or "").strip()
+            if wg_raw and not wg_raw.lower().startswith(("http://", "https://")):
+                wg_raw = "https://" + wg_raw
+            cfg.whatsapp_group_url = wg_raw[:512] or None
+            # Portal URL меняет только суперадмин (сверяем по БД, не по сессии).
+            acting_user = current_user()
+            if acting_user and acting_user.role == "admin":
                 portal_raw = (request.form.get("portal_url", "") or "").strip()
                 if portal_raw and not portal_raw.lower().startswith(("http://", "https://")):
                     portal_raw = "https://" + portal_raw
@@ -3591,7 +4395,7 @@ def admin_settings():
 
 @app.route("/admin/settings/database-export")
 @login_required
-@role_required("superadmin", "komendant")
+@role_required("admin", "komendant")
 def admin_database_export():
     db_path = sqlite_main_database_path()
     if not db_path or not db_path.is_file():
@@ -3638,7 +4442,7 @@ def admin_database_export():
 
 @app.route("/admin/settings/database-import", methods=["POST"])
 @login_required
-@role_required("superadmin")
+@role_required("admin")
 def admin_database_import():
     db_path = sqlite_main_database_path()
     if not db_path or not db_path.is_file():
@@ -3707,7 +4511,7 @@ def admin_database_import():
 
 @app.route("/admin/reset-financial", methods=["POST"])
 @login_required
-@role_required("superadmin")
+@role_required("admin")
 def admin_reset_financial():
     # Reload from DB to get fresh password_hash (avoids SQLAlchemy identity-map stale data)
     user = db.session.get(User, session.get("user_id"))
@@ -3733,7 +4537,7 @@ def admin_reset_financial():
     db.session.commit()
 
     # Write a fresh audit entry after the wipe
-    db.session.add(AuditLog(actor_user_id=user.id, action="Bütün maliyyə məlumatları sıfırlandı (superadmin)"))
+    db.session.add(AuditLog(actor_user_id=user.id, action="Bütün maliyyə məlumatları sıfırlandı (admin)"))
     db.session.commit()
 
     flash("Bütün ödəniş, hesab, xərc, borc və tarixçə məlumatları sıfırlandı.", "success")
@@ -3742,7 +4546,7 @@ def admin_reset_financial():
 
 @app.route("/admin/health/money-schema")
 @login_required
-@role_required("superadmin", "komendant")
+@role_required("admin", "komendant")
 def admin_health_money_schema():
     expected = {
         "apartment": {"credit_balance"},
@@ -3753,7 +4557,12 @@ def admin_health_money_schema():
         "expense": {"amount"},
         "balance_top_up": {"amount"},
     }
-    result = {"ok": True, "tables": {}}
+    result = {"ok": True, "tables": {}, "dialect": db.engine.dialect.name}
+    if not _is_sqlite():
+        # Проверка через PRAGMA применима только к SQLite. Для других диалектов
+        # полагаемся на Alembic/миграции и возвращаем пустой отчёт.
+        result["skipped"] = "non-sqlite dialect"
+        return result
     with db.engine.connect() as conn:
         for table_name, money_columns in expected.items():
             pragma_rows = conn.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()
@@ -3771,7 +4580,7 @@ def admin_health_money_schema():
 
 @app.route("/admin/health/calculation-smoke")
 @login_required
-@role_required("superadmin", "komendant")
+@role_required("admin", "komendant")
 def admin_health_calculation_smoke():
     """
     Run deterministic calculation smoke-checks without DB writes.
@@ -3843,96 +4652,6 @@ def admin_health_calculation_smoke():
 
     ok = all(c["ok"] for c in checks)
     return {"ok": ok, "checks": checks}
-
-
-@app.route("/init")
-def init_data():
-    if os.getenv("ENABLE_INIT_ROUTE", "0") != "1":
-        abort(404)
-    run_startup_migrations()
-
-    def _ensure_user(*, email: str, full_name: str, phone: str, password: str, role: str) -> User:
-        user = User.query.filter_by(email=email).first()
-        if user:
-            return user
-        user = User(
-            full_name=full_name,
-            phone=phone,
-            email=email,
-            password_hash=generate_password_hash(password),
-            role=role,
-        )
-        db.session.add(user)
-        db.session.flush()
-        return user
-
-    # Demo seed should remain idempotent even though bootstrap superadmin
-    # may already be created earlier in the request lifecycle.
-    superadmin = User.query.filter_by(email="admin@emtk.itg.az").first()
-    if not superadmin:
-        superadmin = _ensure_user(
-            email="admin@emtk.itg.az",
-            full_name="Admin",
-            phone="+994500000000",
-            password="admin",
-            role="superadmin",
-        )
-
-    komendant = _ensure_user(
-        email="commandant@smartzhk.local",
-        full_name="Komendant",
-        phone="+994501111111",
-        password="commandant123",
-        role="komendant",
-    )
-    resident = _ensure_user(
-        email="resident@smartzhk.local",
-        full_name="Sakin 1",
-        phone="+994502222222",
-        password="resident123",
-        role="resident",
-    )
-
-    building = Building.query.filter_by(name="A Blok").first()
-    if not building:
-        building = Building(name="A Blok", address="Demo bina")
-        db.session.add(building)
-        db.session.flush()
-
-    apartment = Apartment.query.filter_by(number="A-101").first()
-    if not apartment:
-        apartment = Apartment(
-            number="A-101",
-            floor=1,
-            rooms=3,
-            area=82.5,
-            owner_user_id=resident.id,
-            building_id=building.id,
-        )
-        db.session.add(apartment)
-
-    if not Tariff.query.filter_by(name="İstismar").first():
-        db.session.add(Tariff(name="İstismar", type="per_m2", amount=Decimal("0.80")))
-    if not Tariff.query.filter_by(name="Mühafizə").first():
-        db.session.add(Tariff(name="Mühafizə", type="fixed", amount=Decimal("25.00")))
-
-    if not WorkLog.query.filter_by(title="Lobbidə plitə təmiri").first():
-        db.session.add(
-            WorkLog(
-                title="Lobbidə plitə təmiri",
-                description="Zədələnmiş plitələr dəyişdirildi, giriş zonası istifadəyə açıqdır.",
-            )
-        )
-    if not Announcement.query.filter_by(title="Su kəsintisi").first():
-        db.session.add(
-            Announcement(
-                title="Su kəsintisi",
-                text="Çərşənbə axşamı saat 10:00-dan 14:00-dək planlı texniki işlər aparılacaq.",
-            )
-        )
-
-    db.session.commit()
-    return "Demo data initialized. Open /login"
 
 
 @app.route("/resident/whatsapp/connect")
@@ -4033,7 +4752,7 @@ def whatsapp_webhook(subpath: Optional[str] = None):
         or request.headers.get("apikey")
         or ""
     )
-    if not expected or provided != expected:
+    if not expected or not hmac.compare_digest(provided, expected):
         _wa_log_webhook(
             status_code=403, event=None, remote_jid=None, digits=None,
             matched_user_id=None, note="forbidden: secret mismatch",
@@ -4147,7 +4866,7 @@ def whatsapp_webhook(subpath: Optional[str] = None):
 
 @app.route("/admin/whatsapp/logs")
 @login_required
-@role_required("superadmin", "komendant")
+@role_required("admin", "komendant")
 def admin_whatsapp_logs():
     """Админский просмотр последних webhook-событий."""
     logs = WhatsappWebhookLog.query.order_by(WhatsappWebhookLog.id.desc()).limit(100).all()

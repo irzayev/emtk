@@ -1,4 +1,14 @@
 {% extends "base.html" %}
+{% macro exp_sort_th(col_key, label, th_class='', link_class='text-body', title='') %}
+<th scope="col" class="emtk-sort-th {{ th_class }}"{% if title %} title="{{ title }}"{% endif %} aria-sort="{% if expenses_sort == col_key %}{{ 'ascending' if expenses_sort_dir == 'asc' else 'descending' }}{% else %}none{% endif %}">
+    <a href="{{ url_for('admin_expenses', **expenses_sort_next[col_key]) }}" class="emtk-sort-th-link text-decoration-none {{ link_class }} d-inline-flex align-items-center gap-1">
+        <span>{{ label }}</span>
+        {% if expenses_sort == col_key %}
+        <span class="material-symbols-outlined emtk-sort-th-icon" style="font-size:1rem;" aria-hidden="true">{{ 'arrow_upward' if expenses_sort_dir == 'asc' else 'arrow_downward' }}</span>
+        {% endif %}
+    </a>
+</th>
+{% endmacro %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Xərclər</h3>
@@ -6,6 +16,10 @@
         <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard') }}">Geri</a>
         <form method="get" class="d-flex gap-2 align-items-center">
             <input class="form-control form-control-sm js-monthpicker" name="period" value="{{ period }}" placeholder="YYYY-MM">
+            {% if expenses_sort %}
+            <input type="hidden" name="sort" value="{{ expenses_sort }}">
+            <input type="hidden" name="dir" value="{{ expenses_sort_dir }}">
+            {% endif %}
             <button class="btn btn-sm btn-outline-primary">Goster</button>
         </form>
     </div>
@@ -20,8 +34,12 @@
                     <div class="fw-semibold text-danger">Cəmi: {{ expenses_total|azn }}</div>
                 </div>
                 <div class="d-flex justify-content-end gap-2 mb-3">
-                    <a class="btn btn-outline-success btn-sm" href="{{ url_for('export_expenses', period=period) }}">Excel</a>
-                    <a class="btn btn-outline-primary btn-sm" target="_blank" href="{{ url_for('print_expenses', period=period) }}">Çap</a>
+                    <a class="btn btn-sm btn-outline-success emtk-icon-btn rounded-3" href="{{ url_for('export_expenses', period=period) }}" title="Excel ixracı" aria-label="Excel ixracı">
+                        <span class="material-symbols-outlined" style="font-size:1.125rem;" aria-hidden="true">table_chart</span>
+                    </a>
+                    <a class="btn btn-sm btn-outline-primary emtk-icon-btn rounded-3" target="_blank" href="{{ url_for('print_expenses', period=period) }}" title="Çap üçün aç" aria-label="Çap">
+                        <span class="material-symbols-outlined" style="font-size:1.125rem;" aria-hidden="true">print</span>
+                    </a>
                 </div>
 
                 <div class="border rounded px-3 py-2 mb-3">
@@ -54,53 +72,57 @@
                         <div class="d-none flex-shrink-0" style="width: 6.5rem;" id="expense-amount-wrap">
                             <input class="form-control form-control-sm" type="number" step="0.01" min="0.01" max="9999" name="amount" id="expense-amount-input" placeholder="0.00" title="Məbləğ" aria-label="Məbləğ">
                         </div>
-                        <button type="submit" class="btn btn-sm btn-primary flex-shrink-0" id="expense-add-submit">Əlavə et</button>
+                        <button type="submit" class="btn btn-sm btn-success flex-shrink-0" id="expense-add-submit">Əlavə et</button>
                     </form>
                 </div>
 
                 <div class="table-responsive">
-                    <table class="table align-middle">
+                    <table class="table align-middle emtk-expenses-table">
                         <thead>
                             <tr>
-                                <th>Tip</th>
-                                <th>Tarix</th>
-                                <th>Kateqoriya</th>
-                                <th>Ad</th>
-                                <th>Məbləğ</th>
-                                <th>Şablon</th>
-                                <th>Ödəniş ({{ period }})</th>
+                                {{ exp_sort_th('tip', 'Tip') }}
+                                {{ exp_sort_th('tarix', 'Tarix') }}
+                                {{ exp_sort_th('category', 'Kateqoriya') }}
+                                {{ exp_sort_th('ad', 'Ad') }}
+                                {{ exp_sort_th('mebleg', 'Məbləğ') }}
+                                {{ exp_sort_th('sablon', 'Şablon') }}
+                                {{ exp_sort_th('odenis', 'Ödəniş (' ~ period ~ ')') }}
                                 <th class="text-end"></th>
                             </tr>
                         </thead>
                         <tbody>
-                        {% for t in templates %}
-                            {% set ex = template_expense_by_template_id.get(t.id) %}
-                            <tr>
+                        {% for row in expense_rows %}
+                            {% set stripe = loop.index0 % 2 %}
+                            {% if row.kind == 'template' %}
+                            {% set t = row.template %}
+                            {% set ex = row.expense %}
+                            <tr class="emtk-users-stripe-{{ stripe }}">
                                 <td><span class="badge bg-primary-subtle text-primary">Aylıq</span></td>
                                 <td class="text-muted small">—</td>
                                 <td class="text-muted small">{{ t.category or '—' }}</td>
                                 <td>{{ t.name }}</td>
                                 <td>{% if ex %}{{ ex.amount|azn }}{% else %}{{ (t.default_amount or 0)|azn }}{% endif %}</td>
                                 <td>
-                                    <span class="badge bg-{{ 'success' if t.is_active else 'secondary' }}">{{ 'Aktiv' if t.is_active else 'Passiv' }}</span>
+                                    <span class="badge bg-{{ 'success' if t.is_active else 'secondary' }}">{{ 'Aktiv' if t.is_active else 'Deaktiv' }}</span>
                                 </td>
                                 <td>
                                     {% if ex %}
                                         {% if ex.is_paid %}
-                                            <span class="badge bg-success">Ödənilib</span>
+                                            <span class="badge bg-success">ödənilib</span>
                                         {% else %}
-                                            <span class="badge bg-warning text-dark">Gözləmədə</span>
+                                            <span class="badge bg-warning text-dark">gözləmədə</span>
                                         {% endif %}
                                     {% else %}
                                         <span class="text-muted small">—</span>
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
+                                    <div class="d-inline-flex flex-wrap align-items-center justify-content-end gap-1">
                                     {% if ex %}
                                         <form method="post" action="{{ url_for('toggle_expense_paid', expense_id=ex.id) }}" class="d-inline">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <button class="btn btn-sm {% if ex.is_paid %}btn-outline-secondary{% else %}btn-outline-success{% endif %}">
-                                                {% if ex.is_paid %}Geri al{% else %}Ödəndi{% endif %}
+                                            <button type="submit" class="btn btn-sm {% if ex.is_paid %}btn-outline-secondary{% else %}btn-outline-success{% endif %} emtk-icon-btn rounded-3" title="{% if ex.is_paid %}Geri al{% else %}Ödəndi{% endif %}" aria-label="{% if ex.is_paid %}Geri al{% else %}Ödəndi{% endif %}">
+                                                <span class="material-symbols-outlined">{% if ex.is_paid %}undo{% else %}check_circle{% endif %}</span>
                                             </button>
                                         </form>
                                     {% endif %}
@@ -108,19 +130,26 @@
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="form_type" value="toggle_template">
                                         <input type="hidden" name="template_id" value="{{ t.id }}">
-                                        <button class="btn btn-sm btn-outline-primary">{{ 'Deaktiv' if t.is_active else 'Aktiv et' }}</button>
+                                        <button type="submit" class="btn btn-sm btn-outline-primary emtk-icon-btn rounded-3" title="{{ 'Deaktiv' if t.is_active else 'Aktiv et' }}" aria-label="{{ 'Deaktiv' if t.is_active else 'Aktiv et' }}">
+                                            <span class="material-symbols-outlined">{% if t.is_active %}toggle_off{% else %}toggle_on{% endif %}</span>
+                                        </button>
                                     </form>
-                                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#edit-template-{{ t.id }}">Redaktə et</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary emtk-icon-btn rounded-3" data-bs-toggle="collapse" data-bs-target="#edit-template-{{ t.id }}" title="Redaktə et" aria-label="Redaktə et">
+                                        <span class="material-symbols-outlined">edit</span>
+                                    </button>
                                     <form method="post" class="d-inline" onsubmit="return confirm('Şablon silinsin?')">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="form_type" value="delete_template">
                                         <input type="hidden" name="template_id" value="{{ t.id }}">
-                                        <button class="btn btn-sm btn-outline-danger">Sil</button>
+                                        <button type="submit" class="btn btn-sm btn-outline-danger emtk-icon-btn rounded-3" title="Sil" aria-label="Sil">
+                                            <span class="material-symbols-outlined">delete</span>
+                                        </button>
                                     </form>
+                                    </div>
                                 </td>
                             </tr>
-                            <tr class="collapse" id="edit-template-{{ t.id }}">
-                                <td colspan="8" class="bg-light">
+                            <tr class="collapse emtk-users-stripe-{{ stripe }}" id="edit-template-{{ t.id }}">
+                                <td colspan="8" class="border-top border-light-subtle">
                                     <form method="post" class="row g-2 align-items-end">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="form_type" value="update_template">
@@ -144,14 +173,14 @@
                                         </div>
                                         <div class="col-md-4">
                                             <label class="form-label d-none d-md-block">&nbsp;</label>
-                                            <button class="btn btn-primary w-100">Yadda saxla</button>
+                                            <button class="btn btn-emtk-save w-100">Yadda saxla</button>
                                         </div>
                                     </form>
                                 </td>
                             </tr>
-                        {% endfor %}
-                        {% for e in one_off_expenses %}
-                            <tr>
+                            {% else %}
+                            {% set e = row.expense %}
+                            <tr class="emtk-users-stripe-{{ stripe }}">
                                 <td><span class="badge bg-secondary-subtle text-secondary">Birdəfəlik</span></td>
                                 <td class="text-muted small">{{ e.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
                                 <td class="text-muted small">{{ e.category or '—' }}</td>
@@ -160,27 +189,33 @@
                                 <td class="text-muted small">—</td>
                                 <td>
                                     {% if e.is_paid %}
-                                        <span class="badge bg-success">Ödənilib</span>
+                                        <span class="badge bg-success">ödənilib</span>
                                     {% else %}
-                                        <span class="badge bg-warning text-dark">Gözləmədə</span>
+                                        <span class="badge bg-warning text-dark">gözləmədə</span>
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
+                                    <div class="d-inline-flex flex-wrap align-items-center justify-content-end gap-1">
                                     <form method="post" action="{{ url_for('toggle_expense_paid', expense_id=e.id) }}" class="d-inline">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button class="btn btn-sm {% if e.is_paid %}btn-outline-secondary{% else %}btn-outline-success{% endif %}">
-                                            {% if e.is_paid %}Geri al{% else %}Ödəndi{% endif %}
+                                        <button type="submit" class="btn btn-sm {% if e.is_paid %}btn-outline-secondary{% else %}btn-outline-success{% endif %} emtk-icon-btn rounded-3" title="{% if e.is_paid %}Geri al{% else %}Ödəndi{% endif %}" aria-label="{% if e.is_paid %}Geri al{% else %}Ödəndi{% endif %}">
+                                            <span class="material-symbols-outlined">{% if e.is_paid %}undo{% else %}check_circle{% endif %}</span>
                                         </button>
                                     </form>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-expense-{{ e.id }}">Redaktə et</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary emtk-icon-btn rounded-3" data-bs-toggle="collapse" data-bs-target="#edit-expense-{{ e.id }}" title="Redaktə et" aria-label="Redaktə et">
+                                        <span class="material-symbols-outlined">edit</span>
+                                    </button>
                                     <form method="post" action="{{ url_for('delete_expense', expense_id=e.id) }}" class="d-inline" onsubmit="return confirm('Xərc silinsin?');">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button class="btn btn-sm btn-outline-danger">Sil</button>
+                                        <button type="submit" class="btn btn-sm btn-outline-danger emtk-icon-btn rounded-3" title="Sil" aria-label="Sil">
+                                            <span class="material-symbols-outlined">delete</span>
+                                        </button>
                                     </form>
+                                    </div>
                                 </td>
                             </tr>
-                            <tr class="collapse" id="edit-expense-{{ e.id }}">
-                                <td colspan="8" class="bg-light">
+                            <tr class="collapse emtk-users-stripe-{{ stripe }}" id="edit-expense-{{ e.id }}">
+                                <td colspan="8" class="border-top border-light-subtle">
                                     <form method="post" action="{{ url_for('update_expense', expense_id=e.id) }}" class="row g-2 align-items-end">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <div class="col-md-2">
@@ -205,15 +240,15 @@
                                             <input class="form-control" type="number" step="0.01" min="0.01" max="9999" name="amount" value="{{ e.amount }}" required>
                                         </div>
                                         <div class="col-md-2">
-                                            <button class="btn btn-primary w-100">Yadda saxla</button>
+                                            <button class="btn btn-emtk-save w-100">Yadda saxla</button>
                                         </div>
                                     </form>
                                 </td>
                             </tr>
-                        {% endfor %}
-                        {% if not templates and not one_off_expenses %}
+                            {% endif %}
+                        {% else %}
                             <tr><td colspan="8" class="text-muted">Hələ şablon və ya bu aya aid birdəfəlik xərc yoxdur.</td></tr>
-                        {% endif %}
+                        {% endfor %}
                         </tbody>
                     </table>
                 </div>
@@ -254,7 +289,7 @@
         }
         if (submitBtn) {
             submitBtn.textContent = isTpl ? "Əlavə et" : "Daxil et";
-            submitBtn.className = isTpl ? "btn btn-sm btn-primary flex-shrink-0" : "btn btn-sm btn-success flex-shrink-0";
+            submitBtn.className = "btn btn-sm btn-success flex-shrink-0";
         }
     }
     form.querySelectorAll('input[name="entry_kind"]').forEach((el) => el.addEventListener("change", sync));

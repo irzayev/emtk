@@ -5,123 +5,284 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ system_name }}</title>
     <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/plugins/monthSelect/style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='emtk-stitch.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body class="bg-body-tertiary">
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
-        <div class="container">
-            <a class="navbar-brand fw-bold" href="{{ url_for('dashboard') }}">{{ system_name }}</a>
-            {% if session.get('user_id') %}
-                <div class="ms-auto d-flex gap-2">
-                    <button class="btn btn-sm btn-outline-light d-flex align-items-center gap-1" id="themeToggle" title="Tema">
-                        <span id="themeIcon">☀️</span>
-                    </button>
-                    {% if session.get('role') in ['komendant', 'superadmin'] %}
-                    <a class="btn btn-sm btn-outline-light" href="{{ url_for('admin_settings') }}">Tənzimləmələr</a>
+{% set ep = request.endpoint %}
+{% set is_auth_page = ep in ('login', 'register') %}
+{% set logged = session.get('user_id') %}
+<body class="{% if is_auth_page %}emtk-auth-body{% else %}emtk-app-body{% endif %}">
+{% if is_auth_page %}
+<div class="emtk-auth-blob-a" aria-hidden="true"></div>
+<div class="emtk-auth-blob-b" aria-hidden="true"></div>
+{% endif %}
+{% if logged and not is_auth_page %}
+<div class="emtk-sidebar-overlay d-lg-none" id="emtkSidebarOverlay" hidden></div>
+<aside class="emtk-sidebar" id="emtkSidebar">
+    <a class="emtk-sidebar-brand" href="{{ url_for('dashboard') }}">
+        <div class="emtk-sidebar-brand-mark">
+            <span class="material-symbols-outlined filled text-white" style="font-size:1.35rem;">apartment</span>
+        </div>
+        <div>
+            <h1>{{ system_name }}</h1>
+            <small>İdarəetmə paneli</small>
+        </div>
+    </a>
+    <nav class="emtk-sidebar-nav" aria-label="Əsas naviqasiya">
+        <a class="emtk-sidebar-link {% if ep == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
+            <span class="material-symbols-outlined {% if ep == 'dashboard' %}filled{% endif %}">dashboard</span>
+            Panel
+        </a>
+        {% if session.get('role') in ['komendant', 'admin'] %}
+        <a class="emtk-sidebar-link {% if ep == 'admin_apartments' %}active{% endif %}" href="{{ url_for('admin_apartments') }}">
+            <span class="material-symbols-outlined {% if ep == 'admin_apartments' %}filled{% endif %}">apartment</span>
+            Mənzillər
+        </a>
+        <a class="emtk-sidebar-link {% if ep == 'admin_users' %}active{% endif %}" href="{{ url_for('admin_users') }}">
+            <span class="material-symbols-outlined {% if ep == 'admin_users' %}filled{% endif %}">group</span>
+            İstifadəçilər
+        </a>
+        <a class="emtk-sidebar-link {% if ep == 'admin_tariffs' %}active{% endif %}" href="{{ url_for('admin_tariffs') }}">
+            <span class="material-symbols-outlined {% if ep == 'admin_tariffs' %}filled{% endif %}">request_quote</span>
+            Tariflər
+        </a>
+        <a class="emtk-sidebar-link {% if ep == 'admin_invoices' %}active{% endif %}" href="{{ url_for('admin_invoices') }}">
+            <span class="material-symbols-outlined {% if ep == 'admin_invoices' %}filled{% endif %}">receipt_long</span>
+            Hesab-fakturalar
+        </a>
+        <a class="emtk-sidebar-link {% if ep == 'admin_expenses' %}active{% endif %}" href="{{ url_for('admin_expenses') }}">
+            <span class="material-symbols-outlined {% if ep == 'admin_expenses' %}filled{% endif %}">payments</span>
+            Xərclər
+        </a>
+        <a class="emtk-sidebar-link {% if ep == 'admin_history' %}active{% endif %}" href="{{ url_for('admin_history') }}">
+            <span class="material-symbols-outlined {% if ep == 'admin_history' %}filled{% endif %}">history</span>
+            Tarixçə
+        </a>
+        <a class="emtk-sidebar-link {% if ep == 'admin_payments_report' %}active{% endif %}" href="{{ url_for('admin_payments_report') }}">
+            <span class="material-symbols-outlined {% if ep == 'admin_payments_report' %}filled{% endif %}">calendar_month</span>
+            Ödənişlər (aylıq)
+        </a>
+        <a class="emtk-sidebar-link {% if ep == 'admin_content' %}active{% endif %}" href="{{ url_for('admin_content') }}">
+            <span class="material-symbols-outlined {% if ep == 'admin_content' %}filled{% endif %}">campaign</span>
+            İşlər və elanlar
+        </a>
+        {% endif %}
+    </nav>
+    <div class="emtk-sidebar-foot-stack">
+        {% if whatsapp_group_url %}
+        <a class="emtk-sidebar-foot-wa-group" href="{{ whatsapp_group_url }}" target="_blank" rel="noopener noreferrer">
+            WhatsApp Qrupu
+        </a>
+        {% endif %}
+        {% if support_whatsapp_url %}
+        <a class="emtk-sidebar-foot-support" href="{{ support_whatsapp_url }}" target="_blank" rel="noopener noreferrer">
+            Texniki Dəstək
+        </a>
+        {% else %}
+        <div class="emtk-sidebar-foot-support emtk-sidebar-foot-support--disabled" title="Əlaqə nömrəsi ayarlarda təyin edilməyib">
+            Texniki Dəstək
+        </div>
+        {% endif %}
+    </div>
+</aside>
+<div class="emtk-main">
+    <header class="emtk-topbar">
+        <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-light emtk-sidebar-toggle border-0 rounded-3" id="emtkSidebarOpen" aria-controls="emtkSidebar" aria-expanded="false" aria-label="Menyunu aç">
+                <span class="material-symbols-outlined">menu</span>
+            </button>
+            <span class="text-muted small d-none d-md-inline">{{ system_name }}</span>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button type="button" class="btn btn-light border-0 rounded-3" id="themeToggle" title="Tema">
+                <span id="themeIcon" class="material-symbols-outlined">light_mode</span>
+            </button>
+            {% if current_user_obj %}
+            <div class="dropdown emtk-topbar-user-dropdown">
+                <button type="button" class="btn btn-light border-0 rounded-3 d-flex align-items-center gap-2 py-1 ps-2 pe-2 dropdown-toggle shadow-none" data-bs-toggle="dropdown" data-bs-auto-close="true" aria-expanded="false" aria-haspopup="true" id="emtkUserMenuBtn" title="Hesab menyusu">
+                    <div class="emtk-topbar-user d-none d-sm-block text-end">
+                        <strong class="d-block">{{ current_user_obj.full_name }}</strong>
+                        <span class="d-block">{{ session.get('role', '')|upper }}</span>
+                    </div>
+                    <div class="rounded-circle bg-secondary-subtle d-flex align-items-center justify-content-center text-secondary fw-bold flex-shrink-0" style="width:2.5rem;height:2.5rem;font-size:0.85rem;">
+                        {{ (current_user_obj.full_name or '?')[0]|upper }}
+                    </div>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end border-0 shadow rounded-3 p-2 mt-2 emtk-user-dropdown-menu" aria-labelledby="emtkUserMenuBtn" style="min-width:12rem;">
+                    {% if session.get('role') in ['komendant', 'admin'] %}
+                    <li>
+                        <a class="dropdown-item d-flex align-items-center gap-2 rounded-2 px-3 py-2" href="{{ url_for('admin_settings') }}">
+                            <span class="material-symbols-outlined emtk-user-dropdown-icon" style="font-size:1.15rem;">settings</span>
+                            Tənzimləmələr
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider my-1 mx-1"></li>
                     {% endif %}
-                    <a class="btn btn-sm btn-outline-light" href="{{ url_for('change_password') }}">Şifrə</a>
-                    <form method="post" action="{{ url_for('logout') }}" class="d-inline">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button class="btn btn-sm btn-outline-light" type="submit">Çıxış</button>
-                    </form>
-                </div>
+                    <li>
+                        <a class="dropdown-item d-flex align-items-center gap-2 rounded-2 px-3 py-2 {% if ep == 'change_password' %}active{% endif %}" href="{{ url_for('change_password') }}">
+                            <span class="material-symbols-outlined emtk-user-dropdown-icon" style="font-size:1.15rem;">key</span>
+                            Şifrəni dəyiş
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider my-1 mx-1"></li>
+                    <li>
+                        <form method="post" action="{{ url_for('logout') }}" class="m-0 p-0">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="dropdown-item d-flex align-items-center gap-2 rounded-2 px-3 py-2 text-danger w-100 text-start">
+                                <span class="material-symbols-outlined emtk-user-dropdown-icon" style="font-size:1.15rem;">logout</span>
+                                Çıxış
+                            </button>
+                        </form>
+                    </li>
+                </ul>
+            </div>
             {% endif %}
         </div>
-    </nav>
-
-    <main class="container py-4">
+    </header>
+    <div class="emtk-content">
+{% endif %}
+{% if is_auth_page %}
+<div class="container py-5 position-relative" style="z-index:1;">
+    <div class="d-flex justify-content-end mb-3">
+        <button type="button" class="btn btn-light border-0 rounded-3 shadow-sm" id="themeToggle" title="Tema">
+            <span id="themeIcon" class="material-symbols-outlined">light_mode</span>
+        </button>
+    </div>
+{% elif not logged %}
+<main class="container py-4">
+{% endif %}
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show">
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
                         {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Bağla"></button>
                     </div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
-
         {% block content %}{% endblock %}
-    </main>
-    <footer class="border-top py-3 mt-4 bg-body">
-        <div class="container small text-muted text-center">&copy; {{ now().year if now else '2026' }} by Islam Rzayev</div>
+{% if is_auth_page %}
+</div>
+{% elif not logged %}
+</main>
+{% endif %}
+{% if logged and not is_auth_page %}
+    </div>
+    <footer class="emtk-footer mt-auto">
+        &copy; {{ now().year if now else '2026' }} — Islam Rzayev
     </footer>
+</div>
+{% endif %}
 
-    <div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-xl">
-            <div class="modal-content bg-dark border-0">
-                <div class="modal-header border-0">
-                    <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body text-center pt-0">
-                    <img id="imagePreviewTarget" src="" alt="Sekil boyutmesi" class="img-fluid rounded">
-                </div>
+{% if not is_auth_page %}
+<div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0" style="background:#0f172a;">
+            <div class="modal-header border-0">
+                <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal" aria-label="Bağla"></button>
+            </div>
+            <div class="modal-body text-center pt-0">
+                <img id="imagePreviewTarget" src="" alt="Şəkil önizləməsi" class="img-fluid rounded">
             </div>
         </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/az.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/plugins/monthSelect/index.js"></script>
-    <script>
-        (function() {
-            const saved = localStorage.getItem("theme") || "light";
-            document.documentElement.setAttribute("data-bs-theme", saved);
-            const btn = document.getElementById("themeToggle");
-            const icon = document.getElementById("themeIcon");
-            const setIcon = (theme) => {
-                if (icon) icon.textContent = theme === "dark" ? "🌙" : "☀️";
-            };
-            setIcon(saved);
-            if (btn) {
-                btn.addEventListener("click", function () {
-                    const current = document.documentElement.getAttribute("data-bs-theme") || "light";
-                    const next = current === "light" ? "dark" : "light";
-                    document.documentElement.setAttribute("data-bs-theme", next);
-                    localStorage.setItem("theme", next);
-                    setIcon(next);
-                });
-            }
-        })();
+</div>
+{% endif %}
 
-        document.addEventListener("click", function (event) {
-            const target = event.target.closest(".work-photo-expand");
-            if (!target) return;
-            const modalEl = document.getElementById("imagePreviewModal");
-            const imageEl = document.getElementById("imagePreviewTarget");
-            imageEl.src = target.getAttribute("data-full-src") || target.src;
-            const modal = new bootstrap.Modal(modalEl);
-            modal.show();
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/az.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/plugins/monthSelect/index.js"></script>
+<script>
+(function () {
+    const saved = localStorage.getItem("theme") || "light";
+    document.documentElement.setAttribute("data-bs-theme", saved);
+    const btn = document.getElementById("themeToggle");
+    const icon = document.getElementById("themeIcon");
+    const setIcon = (theme) => {
+        if (icon) icon.textContent = theme === "dark" ? "dark_mode" : "light_mode";
+    };
+    setIcon(saved);
+    if (btn) {
+        btn.addEventListener("click", function () {
+            const current = document.documentElement.getAttribute("data-bs-theme") || "light";
+            const next = current === "light" ? "dark" : "light";
+            document.documentElement.setAttribute("data-bs-theme", next);
+            localStorage.setItem("theme", next);
+            setIcon(next);
         });
+    }
+})();
 
-        (function () {
-            const inputs = document.querySelectorAll("input.js-datepicker");
-            if (!inputs.length || typeof flatpickr === "undefined") return;
+(function () {
+    const sidebar = document.getElementById("emtkSidebar");
+    const openBtn = document.getElementById("emtkSidebarOpen");
+    const overlay = document.getElementById("emtkSidebarOverlay");
+    if (!sidebar || !openBtn) return;
+    function close() {
+        sidebar.classList.remove("emtk-sidebar--open");
+        if (overlay) { overlay.hidden = true; }
+        openBtn.setAttribute("aria-expanded", "false");
+    }
+    function open() {
+        sidebar.classList.add("emtk-sidebar--open");
+        if (overlay) { overlay.hidden = false; }
+        openBtn.setAttribute("aria-expanded", "true");
+    }
+    openBtn.addEventListener("click", function () {
+        if (sidebar.classList.contains("emtk-sidebar--open")) close();
+        else open();
+    });
+    if (overlay) overlay.addEventListener("click", close);
+    window.addEventListener("resize", function () {
+        if (window.innerWidth >= 992) close();
+    });
+    sidebar.querySelectorAll("a.emtk-sidebar-link").forEach(function (a) {
+        a.addEventListener("click", function () { if (window.innerWidth < 992) close(); });
+    });
+})();
 
-            inputs.forEach((el) => {
-                flatpickr(el, {
-                    locale: Object.assign({}, flatpickr.l10ns.az, { firstDayOfWeek: 1 }),
-                    dateFormat: "Y-m-d",
-                    allowInput: true,
-                });
-            });
-        })();
+{% if not is_auth_page %}
+document.addEventListener("click", function (event) {
+    const target = event.target.closest(".work-photo-expand");
+    if (!target) return;
+    const modalEl = document.getElementById("imagePreviewModal");
+    const imageEl = document.getElementById("imagePreviewTarget");
+    if (!modalEl || !imageEl) return;
+    imageEl.src = target.getAttribute("data-full-src") || target.src;
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+});
+{% endif %}
 
-        (function () {
-            const inputs = document.querySelectorAll("input.js-monthpicker");
-            if (!inputs.length || typeof flatpickr === "undefined" || typeof monthSelectPlugin === "undefined") return;
+(function () {
+    const inputs = document.querySelectorAll("input.js-datepicker");
+    if (!inputs.length || typeof flatpickr === "undefined") return;
+    inputs.forEach((el) => {
+        flatpickr(el, {
+            locale: Object.assign({}, flatpickr.l10ns.az, { firstDayOfWeek: 1 }),
+            dateFormat: "Y-m-d",
+            allowInput: true,
+        });
+    });
+})();
 
-            inputs.forEach((el) => {
-                flatpickr(el, {
-                    locale: Object.assign({}, flatpickr.l10ns.az, { firstDayOfWeek: 1 }),
-                    plugins: [new monthSelectPlugin({ shorthand: true, dateFormat: "Y-m", altFormat: "F Y" })],
-                    allowInput: true,
-                });
-            });
-        })();
-    </script>
+(function () {
+    const inputs = document.querySelectorAll("input.js-monthpicker");
+    if (!inputs.length || typeof flatpickr === "undefined" || typeof monthSelectPlugin === "undefined") return;
+    inputs.forEach((el) => {
+        flatpickr(el, {
+            locale: Object.assign({}, flatpickr.l10ns.az, { firstDayOfWeek: 1 }),
+            plugins: [new monthSelectPlugin({ shorthand: true, dateFormat: "Y-m", altFormat: "F Y" })],
+            allowInput: true,
+        });
+    });
+})();
+</script>
 </body>
 </html>

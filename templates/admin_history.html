@@ -42,8 +42,12 @@
 <div class="card border-0 shadow-sm">
     <div class="card-body">
         <div class="d-flex justify-content-end gap-2 mb-2">
-            <a class="btn btn-outline-success btn-sm" href="{{ url_for('export_history', month=selected_month, building_id=building_id) }}">Excel</a>
-            <a class="btn btn-outline-primary btn-sm" target="_blank" href="{{ url_for('print_history', month=selected_month, building_id=building_id) }}">Çap</a>
+            <a class="btn btn-sm btn-outline-success emtk-icon-btn rounded-3" href="{{ url_for('export_history', month=selected_month, building_id=building_id) }}" title="Excel ixracı" aria-label="Excel ixracı">
+                <span class="material-symbols-outlined" style="font-size:1.125rem;" aria-hidden="true">table_chart</span>
+            </a>
+            <a class="btn btn-sm btn-outline-primary emtk-icon-btn rounded-3" target="_blank" href="{{ url_for('print_history', month=selected_month, building_id=building_id) }}" title="Çap üçün aç" aria-label="Çap">
+                <span class="material-symbols-outlined" style="font-size:1.125rem;" aria-hidden="true">print</span>
+            </a>
         </div>
         <div class="table-responsive">
             <table class="table align-middle">
@@ -54,7 +58,7 @@
                         <th>Mənzil</th>
                         <th>Period</th>
                         <th>Status</th>
-                        <th class="text-end">Məbləğ</th>
+                        <th>Məbləğ</th>
                         <th>Qeyd</th>
                     </tr>
                 </thead>
@@ -76,15 +80,15 @@
                         <td>
                             {% if e.type == 'expense' %}
                                 {% if e.paid %}
-                                    <span class="badge bg-success">Ödənilib</span>
+                                    <span class="badge bg-success">ödənilib</span>
                                 {% else %}
-                                    <span class="badge bg-warning text-dark">Gözləmədə</span>
+                                    <span class="badge bg-warning text-dark">gözləmədə</span>
                                 {% endif %}
                             {% else %}
                                 <span class="text-muted small">-</span>
                             {% endif %}
                         </td>
-                        <td class="text-end {% if e.amount < 0 %}text-danger{% else %}text-success{% endif %} fw-semibold">
+                        <td class="{% if e.amount < 0 %}text-danger{% else %}text-success{% endif %} fw-semibold">
                             {{ e.amount|azn }}
                         </td>
                         <td class="small">{{ e.comment or '' }}</td>

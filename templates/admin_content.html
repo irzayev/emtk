@@ -4,6 +4,91 @@
     <h3 class="mb-0">İşlər və elanlar</h3>
     <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard') }}">Geri</a>
 </div>
+
+{% if wa_enabled %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <h5 class="mb-1">WhatsApp ilə mesaj / elan</h5>
+        <p class="small text-secondary mb-3">
+            Hamıya və ya seçilmiş sakinlərə eyni mətn göndərilir. Növbə limiti:
+            <strong>{{ wa_bulk_limit }}</strong> mesaj / <strong>{{ wa_bulk_window_sec }}</strong> san.
+            Telefonu olmayan sakinlər avtomatik atlanır; eyni nömrəyə təkrar göndərilmir.
+        </p>
+        <form method="post" action="{{ url_for('admin_whatsapp_broadcast') }}" class="vstack gap-3" id="waBroadcastForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div>
+                <label class="form-label small text-secondary">Mesaj mətni</label>
+                <textarea class="form-control" name="message" rows="4" maxlength="4096" required placeholder="Məs: su kəsintisi, yığım iclası, texniki işlər…"></textarea>
+            </div>
+            <div class="d-flex flex-wrap gap-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="scope" value="bulk" id="waScopeBulk" checked>
+                    <label class="form-check-label" for="waScopeBulk">Hamıya (telefonu olan bütün sakinlər)</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="scope" value="target" id="waScopeTarget">
+                    <label class="form-check-label" for="waScopeTarget">Seçilmiş sakinlər</label>
+                </div>
+            </div>
+            <div id="waTargetPanel" class="border rounded-3 p-3 bg-light" style="display:none;max-height:14rem;overflow-y:auto;">
+                <div class="small text-secondary mb-2">Sakinləri seçin (yalnız telefonu olanlar aktivdir):</div>
+                {% for u in residents_for_wa %}
+                <label class="d-flex align-items-start gap-2 small mb-1 wa-target-row">
+                    <input type="checkbox" class="mt-1 wa-user-cb" name="user_ids" value="{{ u.id }}" {% if not u.phone %}disabled{% endif %}>
+                    <span>
+                        <span class="fw-medium">{{ u.full_name }}</span>
+                        <span class="text-secondary">
+                            —
+                            {% if u.apartments %}
+                                {% for apt in u.apartments %}
+                                    {% if apt.building %}{{ apt.building.name }} / {% endif %}{{ apt.number }}{% if not loop.last %}, {% endif %}
+                                {% endfor %}
+                            {% else %}
+                                —
+                            {% endif %}
+                            — {{ u.phone or 'telefon yoxdur' }}
+                        </span>
+                    </span>
+                </label>
+                {% else %}
+                <div class="text-muted small">Sakin tapılmadı.</div>
+                {% endfor %}
+            </div>
+            <div class="d-flex justify-content-center">
+                <button type="submit" class="btn btn-success d-inline-flex align-items-center justify-content-center gap-2 rounded-3 px-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592"/>
+                    </svg>
+                    göndər
+                </button>
+            </div>
+        </form>
+        <script>
+        (function () {
+            var bulk = document.getElementById('waScopeBulk');
+            var target = document.getElementById('waScopeTarget');
+            var panel = document.getElementById('waTargetPanel');
+            var form = document.getElementById('waBroadcastForm');
+            if (!bulk || !target || !panel || !form) return;
+            function sync() {
+                panel.style.display = target.checked ? 'block' : 'none';
+            }
+            bulk.addEventListener('change', sync);
+            target.addEventListener('change', sync);
+            form.addEventListener('submit', function (e) {
+                if (target.checked) {
+                    var any = false;
+                    document.querySelectorAll('.wa-user-cb:checked').forEach(function (cb) { if (!cb.disabled) any = true; });
+                    if (!any) { e.preventDefault(); alert('Ən azı bir sakin seçin.'); }
+                }
+            });
+            sync();
+        })();
+        </script>
+    </div>
+</div>
+{% endif %}
+
 <div class="row g-3">
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm">
@@ -18,7 +103,7 @@
                     <input class="form-control" type="file" name="before_photo_file" accept=".jpg,.jpeg,.png,.webp,.gif">
                     <label class="small text-muted">Sonrakı foto</label>
                     <input class="form-control" type="file" name="after_photo_file" accept=".jpg,.jpeg,.png,.webp,.gif">
-                    <button class="btn btn-primary">Yadda saxla</button>
+                    <button class="btn btn-emtk-save">Yadda saxla</button>
                 </form>
             </div>
         </div>
@@ -32,7 +117,7 @@
                     <input type="hidden" name="form_type" value="announcement">
                     <input class="form-control" name="title" placeholder="Başlıq" required>
                     <textarea class="form-control" name="text" placeholder="Mətn" rows="3" required></textarea>
-                    <button class="btn btn-primary">Yadda saxla</button>
+                    <button class="btn btn-emtk-save">Yadda saxla</button>
                 </form>
             </div>
         </div>
@@ -58,11 +143,24 @@
                         {% endif %}
                     </div>
                     {% endif %}
-                    <div class="mt-2 d-flex gap-2">
-                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-worklog-{{ w.id }}">Redakte et</button>
+                    <div class="mt-2 d-flex flex-wrap gap-2 align-items-center">
+                        <button type="button" class="btn btn-sm btn-outline-secondary emtk-icon-btn rounded-3" data-bs-toggle="collapse" data-bs-target="#edit-worklog-{{ w.id }}" title="Redakte et" aria-label="Redakte et">
+                            <span class="material-symbols-outlined">edit</span>
+                        </button>
+                        {% if wa_enabled %}
+                        <form method="post" action="{{ url_for('admin_whatsapp_from_item') }}" class="d-inline" onsubmit="return confirm('Bu iş qeydinin mətnini bütün telefonlu sakinlərə WhatsApp növbəsi ilə göndərmək?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="kind" value="work">
+                            <input type="hidden" name="item_id" value="{{ w.id }}">
+                            <input type="hidden" name="scope" value="bulk">
+                            <button type="submit" class="btn btn-sm btn-outline-success" title="Hamıya">WA hamıya</button>
+                        </form>
+                        {% endif %}
                         <form method="post" action="{{ url_for('delete_worklog', worklog_id=w.id) }}" onsubmit="return confirm('Bu işi silmək istədiyinizə əminsiniz?');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button class="btn btn-sm btn-outline-danger">Sil</button>
+                            <button type="submit" class="btn btn-sm btn-outline-danger emtk-icon-btn rounded-3" title="Sil" aria-label="Sil">
+                                <span class="material-symbols-outlined">delete</span>
+                            </button>
                         </form>
                     </div>
                     <div class="collapse mt-2" id="edit-worklog-{{ w.id }}">
@@ -80,7 +178,7 @@
                                     <input class="form-control" type="file" name="after_photo_file" accept=".jpg,.jpeg,.png,.webp,.gif">
                                 </div>
                             </div>
-                            <button class="btn btn-primary btn-sm">Yadda saxla</button>
+                            <button class="btn btn-emtk-save btn-sm">Yadda saxla</button>
                         </form>
                     </div>
                 </div>
@@ -98,11 +196,24 @@
                 <div class="border rounded p-2 mb-2">
                     <div class="fw-semibold">{{ a.title }}</div>
                     <div class="small text-muted">{{ a.text }}</div>
-                    <div class="mt-2 d-flex gap-2">
-                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-announcement-{{ a.id }}">Redakte et</button>
+                    <div class="mt-2 d-flex flex-wrap gap-2 align-items-center">
+                        <button type="button" class="btn btn-sm btn-outline-secondary emtk-icon-btn rounded-3" data-bs-toggle="collapse" data-bs-target="#edit-announcement-{{ a.id }}" title="Redakte et" aria-label="Redakte et">
+                            <span class="material-symbols-outlined">edit</span>
+                        </button>
+                        {% if wa_enabled %}
+                        <form method="post" action="{{ url_for('admin_whatsapp_from_item') }}" class="d-inline" onsubmit="return confirm('Bu elanın mətnini bütün telefonlu sakinlərə WhatsApp növbəsi ilə göndərmək?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="kind" value="announcement">
+                            <input type="hidden" name="item_id" value="{{ a.id }}">
+                            <input type="hidden" name="scope" value="bulk">
+                            <button type="submit" class="btn btn-sm btn-outline-success" title="Hamıya">WA hamıya</button>
+                        </form>
+                        {% endif %}
                         <form method="post" action="{{ url_for('delete_announcement', announcement_id=a.id) }}" onsubmit="return confirm('Bu elanı silmək istədiyinizə əminsiniz?');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button class="btn btn-sm btn-outline-danger">Sil</button>
+                            <button type="submit" class="btn btn-sm btn-outline-danger emtk-icon-btn rounded-3" title="Sil" aria-label="Sil">
+                                <span class="material-symbols-outlined">delete</span>
+                            </button>
                         </form>
                     </div>
                     <div class="collapse mt-2" id="edit-announcement-{{ a.id }}">
@@ -110,7 +221,7 @@
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input class="form-control" name="title" value="{{ a.title }}" required>
                             <textarea class="form-control" name="text" required>{{ a.text }}</textarea>
-                            <button class="btn btn-primary btn-sm">Yadda saxla</button>
+                            <button class="btn btn-emtk-save btn-sm">Yadda saxla</button>
                         </form>
                     </div>
                 </div>

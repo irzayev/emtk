@@ -9,7 +9,12 @@ services:
       - FLASK_DEBUG=0
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=5000
-      - SECRET_KEY=${SECRET_KEY}
+      # Обязательно задать SECRET_KEY на хосте (через .env или окружение).
+      # Если переменная не задана — compose завершится с ошибкой, а не запустит прод с дефолтом.
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set (use .env or environment)}
+      # Обязательно указать SESSION_COOKIE_SECURE: в проде за HTTPS = 1,
+      # локально по HTTP = 0. Дефолта нет намеренно, чтобы не уйти в прод с insecure-cookie.
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:?SESSION_COOKIE_SECURE must be set (1 for HTTPS, 0 for local HTTP)}
     volumes:
       - ./instance:/app/instance
       - ./static/uploads:/app/static/uploads

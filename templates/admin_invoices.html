@@ -1,16 +1,19 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0">Ödənişlər</h3>
+<div class="emtk-page-head">
+    <div>
+        <h3>Hesab-fakturalar</h3>
+        <p class="text-secondary small mb-0">Fakturaları yaradın, göndərin və ödənişləri qeyd edin.</p>
+    </div>
     <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard') }}">Geri</a>
+        <a class="btn btn-outline-secondary btn-sm rounded-3" href="{{ url_for('dashboard') }}">Geri</a>
         <form method="post" action="{{ url_for('generate_invoices') }}" class="d-flex gap-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <select class="form-select form-select-sm" name="period_mode">
+            <select class="form-select form-select-sm rounded-3" name="period_mode">
                 <option value="current" selected>Cari ay</option>
                 <option value="next">Növbəti ay (cari + növbəti)</option>
             </select>
-            <button class="btn btn-primary btn-sm" type="submit">Yarat</button>
+            <button class="btn btn-primary btn-sm rounded-3" type="submit">Yarat</button>
         </form>
     </div>
 </div>
@@ -54,44 +57,71 @@
 </div>
 <div class="card border-0 shadow-sm">
     <div class="card-body">
-        <div class="d-flex justify-content-end gap-2 mb-2">
-            <a class="btn btn-outline-success btn-sm" href="{{ url_for('export_invoices', period=selected_period, building_id=building_id) }}">Excel</a>
-            <a class="btn btn-outline-primary btn-sm" target="_blank" href="{{ url_for('print_invoices', period=selected_period, building_id=building_id) }}">Çap</a>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <div class="small text-secondary text-nowrap order-0 me-2">
+                Ödənilib = {{ period_apartments_paid_pct }}% · Gecikmə = {{ period_apartments_late_pct }}%
+            </div>
+            <div class="d-flex align-items-center flex-wrap gap-2 ms-auto">
+            <a class="btn btn-sm btn-outline-success emtk-icon-btn rounded-3" href="{{ url_for('export_invoices', period=selected_period, building_id=building_id) }}" title="Excel ixracı" aria-label="Excel ixracı">
+                <span class="material-symbols-outlined" style="font-size:1.125rem;" aria-hidden="true">table_chart</span>
+            </a>
+            <a class="btn btn-sm btn-outline-primary emtk-icon-btn rounded-3" target="_blank" href="{{ url_for('print_invoices', period=selected_period, building_id=building_id) }}" title="Çap üçün aç" aria-label="Çap">
+                <span class="material-symbols-outlined" style="font-size:1.125rem;" aria-hidden="true">print</span>
+            </a>
             <form method="post" action="{{ url_for('send_invoices_email_bulk') }}"
+                  class="d-inline-flex align-items-center m-0"
                   onsubmit="return confirm('Seçilmiş filtrə uyğun bütün sakinlərə hesab-faktura email ilə göndərmək?');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="period" value="{{ selected_period }}">
                 <input type="hidden" name="building_id" value="{{ building_id or '' }}">
-                <button class="btn btn-primary btn-sm" type="submit" title="SMTP ayarlarından istifadə olunur">
-                    Hamısına Email
+                <button class="btn btn-sm emtk-btn-bulk-email emtk-toolbar-bulk-btn d-inline-flex align-items-center gap-1 rounded-3" type="submit" title="SMTP ayarlarından istifadə olunur" aria-label="Hamısına email">
+                    Hamısına
+                    <span class="material-symbols-outlined" style="font-size:1.125rem;" aria-hidden="true">mail</span>
                 </button>
             </form>
             {% if wa_enabled %}
             <form method="post" action="{{ url_for('send_invoices_whatsapp_bulk') }}"
+                  class="d-inline-flex align-items-center m-0"
                   onsubmit="return confirm('Bütün sakinlərə WhatsApp göndərmək? (limit növbəyə tətbiq olunur)');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="period" value="{{ selected_period }}">
                 <input type="hidden" name="building_id" value="{{ building_id or '' }}">
-                <button class="btn btn-success btn-sm" type="submit" title="Rate limit 10 mesaj / 5 dəq (ayarlardan)">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" class="me-1">
+                <button class="btn btn-success btn-sm emtk-toolbar-bulk-btn d-inline-flex align-items-center gap-1 rounded-3" type="submit" title="Rate limit 10 mesaj / 5 dəq (ayarlardan)" aria-label="Hamısına WhatsApp">
+                    Hamısına
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true" class="flex-shrink-0">
                         <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592"/>
                     </svg>
-                    Hamısına WhatsApp
                 </button>
             </form>
             {% endif %}
+            </div>
         </div>
         <div class="table-responsive">
-            <table class="table">
-                <thead><tr>{% if buildings_all %}<th>Korpus</th>{% endif %}<th>Mənzil</th><th>Period</th><th>Hesablanıb</th><th>Ödənilib</th><th>Balans</th><th>Status</th><th>Tam ödəniş</th><th>Ödəniş</th><th>Hesab-faktura</th><th>Email</th>{% if wa_enabled %}<th>WhatsApp</th>{% endif %}</tr></thead>
+            {% set table_colspan = 9 + (1 if buildings_all else 0) %}
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        {% if buildings_all %}<th class="text-nowrap">Korpus</th>{% endif %}
+                        <th class="text-nowrap">Mənzil</th>
+                        <th class="text-nowrap">Hesablanıb</th>
+                        <th class="text-nowrap">ödənilib</th>
+                        <th class="text-nowrap">Balans</th>
+                        <th class="text-nowrap">Status</th>
+                        <th class="text-nowrap">Tam ödəniş</th>
+                        <th style="min-width: 240px;">Ödəniş</th>
+                        <th class="text-center text-nowrap emtk-invoice-group-head emtk-invoice-actions-col">Hesab-fakturalar</th>
+                        <th class="text-center text-nowrap emtk-invoice-group-head emtk-invoice-actions-col">Qəbz</th>
+                    </tr>
+                </thead>
                 <tbody>
                 {% for i in invoices %}
                     {% set balance = (i.paid_amount - i.amount) %}
                     {% set computed_status = ('ödənilib' if i.paid_amount >= i.amount else 'ödənilməyib') %}
+                    {% set confirmed_pays = (i.payments | selectattr('status', 'equalto', 'confirmed') | list | sort(attribute='created_at', reverse=true)) %}
+                    {% set last_confirmed = confirmed_pays[0] if confirmed_pays else none %}
                     <tr>
                         {% if buildings_all %}<td class="text-muted small">{{ i.apartment.building.name if i.apartment and i.apartment.building else '—' }}</td>{% endif %}
                         <td>{{ i.apartment.number }}</td>
-                        <td>{{ i.period }}</td>
                         <td>{{ i.amount|azn }}</td>
                         <td>
                             <div>{{ i.paid_amount|azn }}</div>
@@ -105,7 +135,13 @@
                                 <span class="text-muted">{{ 0|azn }}</span>
                             {% endif %}
                         </td>
-                        <td><span class="badge bg-{{ 'success' if computed_status == 'ödənilib' else 'warning' }}">{{ computed_status }}</span></td>
+                        <td>
+                            {% if computed_status == 'ödənilib' %}
+                                <span class="emtk-status emtk-status--success">ödənilib</span>
+                            {% else %}
+                                <span class="emtk-status emtk-status--danger">gözləmədə</span>
+                            {% endif %}
+                        </td>
                         <td>
                             {% set remaining_debt = (i.amount - i.paid_amount) %}
                             {% if remaining_debt > 0 %}
@@ -113,7 +149,6 @@
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="period" value="{{ selected_period }}">
                                 <input type="hidden" name="amount" value="{{ remaining_debt|round(2) }}">
-                                <input type="hidden" name="comment" value="Tam ödəniş">
                                 <button class="btn btn-sm btn-outline-success w-100">Tam ödəniş</button>
                             </form>
                             {% else %}
@@ -131,40 +166,71 @@
                                     <input class="form-control form-control-sm" name="comment" placeholder="Qeyd">
                                 </div>
                                 <div class="col-12 col-md-3">
-                                    <button class="btn btn-sm btn-success w-100">Mədaxil</button>
+                                    <button type="submit" class="btn btn-sm btn-success w-100 emtk-btn-medxil">Mədaxil</button>
                                 </div>
                             </form>
                         </td>
-                        <td>
-                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('print_invoice', invoice_id=i.id) }}" target="_blank">Çap</a>
+                        <td class="text-center emtk-invoice-actions-col">
+                            <div class="emtk-invoice-actions">
+                                <a class="btn btn-sm btn-outline-secondary emtk-icon-btn rounded-3" href="{{ url_for('print_invoice', invoice_id=i.id) }}" target="_blank" title="Hesab-fakturanı çap et" aria-label="Çap">
+                                    <span class="material-symbols-outlined" style="font-size:1.1rem;">print</span>
+                                </a>
+                                <form method="post" action="{{ url_for('send_invoice_email', invoice_id=i.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-sm btn-outline-primary emtk-icon-btn rounded-3" type="submit" title="{% if not i.apartment.owner or not i.apartment.owner.email %}Email yoxdur{% else %}Hesab-fakturanı email ilə göndər{% endif %}" aria-label="Email"
+                                            {% if not i.apartment.owner or not i.apartment.owner.email %}disabled{% endif %}>
+                                        <span class="material-symbols-outlined" style="font-size:1.1rem;">mail</span>
+                                    </button>
+                                </form>
+                                {% if wa_enabled %}
+                                <form method="post" action="{{ url_for('send_invoice_whatsapp', invoice_id=i.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-sm btn-outline-success emtk-icon-btn rounded-3" type="submit" title="{% if not i.apartment.owner or not i.apartment.owner.phone %}Telefon nömrəsi yoxdur{% else %}Hesab-fakturanı WhatsApp ilə göndər{% endif %}" aria-label="WhatsApp"
+                                            {% if not i.apartment.owner or not i.apartment.owner.phone %}disabled{% endif %}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                            <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/>
+                                        </svg>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
                         </td>
-                        <td>
-                            <form method="post" action="{{ url_for('send_invoice_email', invoice_id=i.id) }}">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button class="btn btn-sm btn-outline-primary" type="submit"
-                                        {% if not i.apartment.owner or not i.apartment.owner.email %}disabled title="Email yoxdur"{% else %}title="Email ilə göndər"{% endif %}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
-                                        <path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4Zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1H2Zm13 2.383-4.708 2.825L15 11.105V5.383Zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741ZM1 11.105l4.708-2.897L1 5.383v5.722Z"/>
-                                    </svg>
-                                </button>
-                            </form>
+                        <td class="text-center emtk-invoice-actions-col">
+                            {% if last_confirmed %}
+                            <div class="emtk-invoice-actions">
+                                <a class="btn btn-sm btn-outline-secondary emtk-icon-btn rounded-3" href="{{ url_for('print_payment_receipt', payment_id=last_confirmed.id) }}" target="_blank" title="Qəbzi çap et" aria-label="Çap">
+                                    <span class="material-symbols-outlined" style="font-size:1.1rem;">print</span>
+                                </a>
+                                <form method="post" action="{{ url_for('send_payment_receipt_email', payment_id=last_confirmed.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="period" value="{{ selected_period }}">
+                                    <input type="hidden" name="building_id" value="{{ building_id or '' }}">
+                                    <button class="btn btn-sm btn-outline-primary emtk-icon-btn rounded-3" type="submit" title="{% if not i.apartment.owner or not i.apartment.owner.email %}Email yoxdur{% else %}Qəbzi email ilə göndər (#{{ last_confirmed.id }}){% endif %}" aria-label="Email"
+                                            {% if not i.apartment.owner or not i.apartment.owner.email %}disabled{% endif %}>
+                                        <span class="material-symbols-outlined" style="font-size:1.1rem;">mail</span>
+                                    </button>
+                                </form>
+                                {% if wa_enabled %}
+                                <form method="post" action="{{ url_for('send_payment_receipt_whatsapp', payment_id=last_confirmed.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="period" value="{{ selected_period }}">
+                                    <input type="hidden" name="building_id" value="{{ building_id or '' }}">
+                                    <button class="btn btn-sm btn-outline-success emtk-icon-btn rounded-3" type="submit" title="{% if not i.apartment.owner or not i.apartment.owner.phone %}Telefon nömrəsi yoxdur{% else %}Qəbzi WhatsApp ilə göndər (#{{ last_confirmed.id }}){% endif %}" aria-label="WhatsApp"
+                                            {% if not i.apartment.owner or not i.apartment.owner.phone %}disabled{% endif %}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                            <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/>
+                                        </svg>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <span class="text-muted small">—</span>
+                            {% endif %}
                         </td>
-                        {% if wa_enabled %}
-                        <td>
-                            <form method="post" action="{{ url_for('send_invoice_whatsapp', invoice_id=i.id) }}">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button class="btn btn-sm btn-outline-success" type="submit"
-                                        {% if not i.apartment.owner or not i.apartment.owner.phone %}disabled title="Telefon nömrəsi yoxdur"{% else %}title="WhatsApp ilə göndər"{% endif %}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                                        <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/>
-                                    </svg>
-                                </button>
-                            </form>
-                        </td>
-                        {% endif %}
                     </tr>
                 {% else %}
-                    <tr><td colspan="{{ (12 if wa_enabled else 11) if buildings_all else (11 if wa_enabled else 10) }}" class="text-muted">Hesab tapılmadı.</td></tr>
+                    <tr><td colspan="{{ table_colspan }}" class="text-muted">Hesab tapılmadı.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>

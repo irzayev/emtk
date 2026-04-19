@@ -1,22 +1,33 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-7 col-lg-6">
-        <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-body p-4">
-                <h4 class="fw-bold mb-3">Sakin qeydiyyati</h4>
-                <div class="alert alert-info py-2 small">
-                    Qeydiyyatdan sonra mənzil komendant və ya administrator tərəfindən təyin edilir.
-                </div>
-                <form method="post" class="row g-2" id="registerForm">
+    <div class="col-12 col-lg-11 col-xl-10">
+        <div class="emtk-auth-card row g-0 align-items-stretch">
+            <div class="col-lg-5 p-4 p-md-5 d-flex flex-column">
+                <header class="mb-4">
+                    <div class="d-flex align-items-center gap-3 mb-4">
+                        <div class="emtk-sidebar-brand-mark" style="width:2.5rem;height:2.5rem;">
+                            <span class="material-symbols-outlined filled text-white" style="font-size:1.25rem;">person_add</span>
+                        </div>
+                        <span class="emtk-display fs-3 fw-bold">Sakin qeydiyyatı</span>
+                    </div>
+                    <p class="text-secondary small mb-0">Qeydiyyatdan sonra mənzil komendant tərəfindən təyin edilir.</p>
+                </header>
+                <form method="post" class="d-flex flex-column flex-grow-1 emtk-auth-register-form" id="registerForm">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="phone" id="phoneHidden">
-                    <div class="col-12">
-                        <label class="form-label">Ad Soyad</label>
-                        <input class="form-control" name="full_name" required>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Ad</label>
+                            <input class="form-control" name="first_name" required maxlength="59" autocomplete="given-name">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Soyad</label>
+                            <input class="form-control" name="last_name" required maxlength="59" autocomplete="family-name">
+                        </div>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Telefon</label>
+                    <div class="mb-3">
+                        <label class="form-label small text-secondary">Telefon</label>
                         <div class="input-group">
                             <span class="input-group-text">+994</span>
                             <input class="form-control" type="tel" id="phoneLocal" required
@@ -25,21 +36,24 @@
                                    placeholder="XXXXXXXXX" title="9 rəqəm">
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Email</label>
-                        <input class="form-control" type="email" name="email" required>
+                    <div class="mb-3">
+                        <label class="form-label small text-secondary">Email</label>
+                        <input class="form-control" type="email" name="email" required autocomplete="email">
                     </div>
-                    <div class="col-12">
-                        <label class="form-label">Şifrə</label>
+                    <div class="mb-3">
+                        <label class="form-label small text-secondary">Şifrə</label>
                         <input class="form-control" type="password" name="password" id="password" required minlength="6" autocomplete="new-password">
                     </div>
-                    <div class="col-12">
-                        <label class="form-label">Şifrəni təsdiqləyin</label>
+                    <div class="mb-4">
+                        <label class="form-label small text-secondary">Şifrəni təsdiqləyin</label>
                         <input class="form-control" type="password" name="password_confirm" id="password_confirm" required minlength="6" autocomplete="new-password">
                     </div>
-                    <div class="col-12 mt-3 d-flex gap-2">
-                        <button class="btn btn-primary">Qeydiyyat</button>
-                        <a class="btn btn-outline-secondary" href="{{ url_for('login') }}">Giriş səhifəsi</a>
+                    <div class="d-flex flex-wrap gap-2 align-items-stretch mt-auto">
+                        <button class="emtk-btn-cta px-4 d-inline-flex align-items-center justify-content-center gap-2" type="submit">
+                            Qeydiyyat
+                            <span class="material-symbols-outlined" style="font-size:1.1rem;">arrow_forward</span>
+                        </button>
+                        <a class="btn btn-outline-secondary emtk-auth-register-back d-inline-flex align-items-center justify-content-center text-decoration-none" href="{{ url_for('login') }}">Giriş səhifəsi</a>
                     </div>
                 </form>
                 <script>
@@ -47,64 +61,40 @@
                     const form = document.getElementById('registerForm');
                     const local = document.getElementById('phoneLocal');
                     const hidden = document.getElementById('phoneHidden');
-                    const fullName = form?.querySelector('input[name="full_name"]');
+                    const firstName = form?.querySelector('input[name="first_name"]');
+                    const lastName = form?.querySelector('input[name="last_name"]');
                     const email = form?.querySelector('input[name="email"]');
                     if (!form || !local || !hidden) return;
-                    // Yalnız rəqəmlərə icazə veririk.
                     local.addEventListener('input', () => {
                         local.value = local.value.replace(/\D+/g, '').slice(0, 9);
                     });
                     const p = document.getElementById('password');
                     const pc = document.getElementById('password_confirm');
                     const validityMessages = new Map([
-                        [fullName, {
-                            valueMissing: 'Ad və soyadı daxil edin.'
-                        }],
-                        [local, {
-                            valueMissing: 'Telefon nömrəsini daxil edin.',
-                            patternMismatch: 'Telefon nömrəsi 9 rəqəmdən ibarət olmalıdır.'
-                        }],
-                        [email, {
-                            valueMissing: 'Email ünvanını daxil edin.',
-                            typeMismatch: 'Düzgün email ünvanı daxil edin.'
-                        }],
-                        [p, {
-                            valueMissing: 'Şifrəni daxil edin.',
-                            tooShort: 'Şifrə ən azı 6 simvol olmalıdır.'
-                        }],
-                        [pc, {
-                            valueMissing: 'Şifrə təsdiqini daxil edin.',
-                            tooShort: 'Şifrə ən azı 6 simvol olmalıdır.'
-                        }]
+                        [firstName, { valueMissing: 'Adı daxil edin.' }],
+                        [lastName, { valueMissing: 'Soyadı daxil edin.' }],
+                        [local, { valueMissing: 'Telefon nömrəsini daxil edin.', patternMismatch: 'Telefon nömrəsi 9 rəqəmdən ibarət olmalıdır.' }],
+                        [email, { valueMissing: 'Email ünvanını daxil edin.', typeMismatch: 'Düzgün email ünvanı daxil edin.' }],
+                        [p, { valueMissing: 'Şifrəni daxil edin.', tooShort: 'Şifrə ən azı 6 simvol olmalıdır.' }],
+                        [pc, { valueMissing: 'Şifrə təsdiqini daxil edin.', tooShort: 'Şifrə ən azı 6 simvol olmalıdır.' }]
                     ]);
-
                     function applyAzValidityMessage(field) {
                         if (!field) return;
                         field.setCustomValidity('');
                         const messages = validityMessages.get(field);
                         if (!messages) return;
                         const validity = field.validity;
-                        if (validity.valueMissing && messages.valueMissing) {
-                            field.setCustomValidity(messages.valueMissing);
-                        } else if (validity.typeMismatch && messages.typeMismatch) {
-                            field.setCustomValidity(messages.typeMismatch);
-                        } else if (validity.patternMismatch && messages.patternMismatch) {
-                            field.setCustomValidity(messages.patternMismatch);
-                        } else if (validity.tooShort && messages.tooShort) {
-                            field.setCustomValidity(messages.tooShort);
-                        }
+                        if (validity.valueMissing && messages.valueMissing) field.setCustomValidity(messages.valueMissing);
+                        else if (validity.typeMismatch && messages.typeMismatch) field.setCustomValidity(messages.typeMismatch);
+                        else if (validity.patternMismatch && messages.patternMismatch) field.setCustomValidity(messages.patternMismatch);
+                        else if (validity.tooShort && messages.tooShort) field.setCustomValidity(messages.tooShort);
                     }
-
-                    function clearFieldValidity(field) {
-                        if (field) field.setCustomValidity('');
-                    }
-
-                    [fullName, local, email, p, pc].forEach((field) => {
+                    function clearFieldValidity(field) { if (field) field.setCustomValidity(''); }
+                    [firstName, lastName, local, email, p, pc].forEach((field) => {
                         if (!field) return;
                         field.addEventListener('input', () => clearFieldValidity(field));
                         field.addEventListener('invalid', () => applyAzValidityMessage(field));
                     });
-
                     form.addEventListener('submit', (e) => {
                         const v = local.value.replace(/\D+/g, '');
                         hidden.value = v ? ('+994' + v) : '';
@@ -112,12 +102,22 @@
                             e.preventDefault();
                             pc.setCustomValidity('Şifrələr üst-üstə düşmür.');
                             pc.reportValidity();
-                        } else if (pc) {
-                            clearFieldValidity(pc);
-                        }
+                        } else if (pc) clearFieldValidity(pc);
                     });
                 })();
                 </script>
+            </div>
+            <div class="col-lg-7 emtk-auth-hero d-none d-lg-flex flex-column justify-content-end text-white p-0">
+                <div class="emtk-auth-hero-overlay"></div>
+                <div class="position-relative w-100 h-100" style="min-height:22rem;background:linear-gradient(145deg, #0f172a 0%, #00164e 50%, #57657a 100%);"></div>
+                <div class="emtk-auth-hero-panel position-absolute">
+                    <div class="emtk-glass-panel text-dark">
+                        <h2 class="h5 fw-bold mb-2 emtk-display emtk-auth-hero-title">Bir addım qalır</h2>
+                        <p class="small text-secondary mb-0" style="line-height:1.5;">
+                            Qeydiyyatdan sonra komendant sizə mənzil təyin edəcək; bundan sonra bütün ödənişlər və bildirişlər bu portaldan idarə olunur.
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

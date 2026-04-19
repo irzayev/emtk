@@ -1,118 +1,309 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0">Komendant paneli</h3>
-    <div class="d-flex gap-2">
-        <form method="post" action="{{ url_for('generate_invoices') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        </form>
+<style>
+    /* Flatpickr təqvimi Bootstrap modalının üstündə görünsün */
+    .flatpickr-calendar { z-index: 1106 !important; }
+</style>
+<div class="emtk-page-head">
+    <div>
+        <h3>Komendant paneli</h3>
+        <p class="text-secondary small mb-0">Ümumi göstəricilər və seçilmiş tarix aralığı üzrə ödənişlər.</p>
     </div>
+    <button type="button" class="btn btn-primary btn-sm rounded-3 d-inline-flex align-items-center justify-content-center" style="width:2.35rem;height:2.35rem;padding:0;" data-bs-toggle="modal" data-bs-target="#dashboardDateFilterModal" title="Tarix filtri" aria-label="Tarix filtri">
+        <span class="material-symbols-outlined" style="font-size:1.25rem;">filter_alt</span>
+    </button>
 </div>
 
-<div class="d-flex flex-wrap gap-2 mb-3">
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin_apartments') }}">Mənzillər</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin_users') }}">İstifadəçilər</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin_tariffs') }}">Tariflər</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin_invoices') }}">Ödənişlər</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin_expenses') }}">Xərclər</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin_history') }}">Tarixçə</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments_report') }}">Ödənişlər (aylıq)</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin_content') }}">İşlər və elanlar</a>
-</div>
-
-<form method="get" class="row g-2 mb-3">
-    <div class="col-md-3"><input class="form-control js-datepicker" type="text" name="from_date" value="{{ from_date }}" placeholder="YYYY-MM-DD"></div>
-    <div class="col-md-3"><input class="form-control js-datepicker" type="text" name="to_date" value="{{ to_date }}" placeholder="YYYY-MM-DD"></div>
-    <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
-</form>
-
-<div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-6 g-3 mb-4">
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Menzil sayi</div><div class="h4">{{ apartments_count }}</div></div></div></div>
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Ümumi balans</div>
-        {% if house_balance > 0 %}
-            <div class="h4 text-success">+{{ house_balance|azn }}</div>
-        {% elif house_balance < 0 %}
-            <div class="h4 text-danger">-{{ (house_balance * -1)|azn }}</div>
-        {% else %}
-            <div class="h4 text-muted">{{ house_balance|azn }}</div>
-        {% endif %}
-    </div></div></div>
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Yığılmış məbləğ</div>
-        <div class="h4 text-success">{{ apartment_payments_period|azn }}</div>
-    </div></div></div>
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Ümumi borc</div><div class="h4 text-danger">{{ total_debt|azn }}</div></div></div></div>
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Xərclər (ödənilmiş)</div><div class="h4 text-danger">{{ paid_expenses_total|azn }}</div></div></div></div>
-    <div class="col"><div class="card metric-card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Xərclər (ödənilməmiş)</div><div class="h4 text-danger">{{ unpaid_expenses_total|azn }}</div></div></div></div>
-</div>
-
-<div class="card border-0 shadow-sm mb-3">
-    <div class="card-body">
-        <h5 class="mb-2">Balans artırma</h5>
-        <form method="post" action="{{ url_for('balance_topup') }}" class="row g-2 align-items-end">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="col-md-2">
-                <label class="form-label">Məbləğ</label>
-                <input class="form-control" type="number" step="0.01" min="0.01" max="9999" name="amount" required>
+<div class="modal fade" id="dashboardDateFilterModal" tabindex="-1" aria-labelledby="dashboardDateFilterTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-3">
+            <div class="modal-header border-0 pb-0">
+                <h2 class="modal-title h6 fw-bold emtk-display" id="dashboardDateFilterTitle">Tarix aralığı</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bağla"></button>
             </div>
-            <div class="col-md-8">
-                <label class="form-label">Şərh</label>
-                <input class="form-control" name="comment" placeholder="Məs: Sponsor, əlavə yığım, ...">
+            <div class="modal-body pt-2">
+                <form method="get" class="d-grid gap-3">
+                    <div>
+                        <label class="form-label small mb-1" for="dashFilterFrom">Başlanğıc</label>
+                        <input class="form-control form-control-sm js-datepicker" id="dashFilterFrom" type="text" name="from_date" value="{{ from_date }}" placeholder="YYYY-MM-DD" autocomplete="off">
+                    </div>
+                    <div>
+                        <label class="form-label small mb-1" for="dashFilterTo">Son</label>
+                        <input class="form-control form-control-sm js-datepicker" id="dashFilterTo" type="text" name="to_date" value="{{ to_date }}" placeholder="YYYY-MM-DD" autocomplete="off">
+                    </div>
+                    <div class="d-flex gap-2 pt-1">
+                        <button type="button" class="btn btn-light flex-grow-1 rounded-3" data-bs-dismiss="modal">Ləğv et</button>
+                        <button type="submit" class="btn btn-primary flex-grow-1 rounded-3">Tətbiq et</button>
+                    </div>
+                </form>
             </div>
-            <div class="col-md-2">
-                <button class="btn btn-success w-100">Mədaxil</button>
-            </div>
-        </form>
-        <div class="small text-muted mt-2">Ümumi balansa əlavə olunur.</div>
-    </div>
-</div>
-
-<div class="card border-0 shadow-sm mb-3">
-    <div class="card-body">
-        <h5>Ödəniş cədvəli</h5>
-        <div class="table-responsive">
-            <table class="table">
-                <thead><tr><th>Mənzil</th><th>Period</th><th>Məbləğ</th><th>Tarix</th></tr></thead>
-                <tbody>
-                    {% for r in payment_table %}
-                    <tr><td>{{ r.apartment }}</td><td>{{ r.period }}</td><td>{{ r.amount|azn }}</td><td>{{ r.date }}</td></tr>
-                    {% else %}
-                    <tr><td colspan="4" class="text-muted">Melumat yoxdur.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
         </div>
     </div>
 </div>
 
-<div class="card border-0 shadow-sm mb-3">
-    <div class="card-body">
-        <h5>Balans cədvəli</h5>
-        <table class="table">
-            <thead><tr><th>Mənzil</th><th>Balans</th></tr></thead>
-            <tbody>
-                {% for ap_no, debt in debt_by_apartment %}
-                <tr><td>{{ ap_no }}</td><td>{{ (debt or 0)|azn }}</td></tr>
+<div class="emtk-dashboard-bento">
+<!-- Bento summary -->
+<div class="emtk-bento-grid mb-4">
+    <a href="{{ url_for('admin_apartments') }}" class="emtk-bento-card emtk-bento-card--link text-decoration-none text-reset" aria-label="Mənzillər">
+        <div class="emtk-bento-head">
+            <span class="icon-box"><span class="material-symbols-outlined">group</span></span>
+            <div class="emtk-bento-main">
+                <p class="label">Mənzil sayı</p>
+                <div class="value-row">
+                    <span class="value">{{ apartments_count }}</span>
+                    <span class="pill">Ümumi</span>
+                </div>
+            </div>
+        </div>
+    </a>
+    <a href="{{ url_for('admin_invoices') }}" class="emtk-bento-card emtk-bento-card--link emtk-bento-card--dash-accent-green text-decoration-none text-reset" aria-label="Ödənişlər">
+        <div class="emtk-bento-head">
+            <span class="icon-box"><span class="material-symbols-outlined">account_balance_wallet</span></span>
+            <div class="emtk-bento-main">
+                <p class="label">Yığılmış məbləğ</p>
+                <div class="value-row">
+                    <span class="value">{{ apartment_payments_period|azn }}</span>
+                    <span class="pill pill--success">+ Daxilolma</span>
+                </div>
+            </div>
+        </div>
+    </a>
+    <a href="{{ url_for('admin_invoices') }}" class="emtk-bento-card emtk-bento-card--link {% if total_debt > 0 %}emtk-bento-card--dash-accent-debt-red{% else %}emtk-bento-card--dash-accent-green{% endif %} text-decoration-none text-reset" aria-label="Ödənişlər">
+        <div class="emtk-bento-head">
+            <span class="icon-box"><span class="material-symbols-outlined">trending_down</span></span>
+            <div class="emtk-bento-main">
+                <p class="label">Ümumi borc</p>
+                <div class="value-row">
+                    <span class="value{% if total_debt > 0 %} emtk-bento-value--danger{% endif %}">{{ total_debt|azn }}</span>
+                    {% if total_debt > 0 %}
+                    <span class="pill pill--danger">Borc</span>
+                    {% else %}
+                    <span class="pill">Təmiz</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </a>
+    {% if house_balance > 0 %}
+    <div class="emtk-bento-card emtk-bento-card--balance-positive">
+        <div class="emtk-bento-head">
+            <span class="icon-box"><span class="material-symbols-outlined">trending_up</span></span>
+            <div class="emtk-bento-main">
+                <p class="label">Ümumi balans</p>
+                <div class="value-row">
+                    <span class="value">+{{ house_balance|azn }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% elif house_balance < 0 %}
+    <div class="emtk-bento-card emtk-bento-card--balance-negative">
+        <div class="emtk-bento-head">
+            <span class="icon-box"><span class="material-symbols-outlined">trending_down</span></span>
+            <div class="emtk-bento-main">
+                <p class="label">Ümumi balans</p>
+                <div class="value-row">
+                    <span class="value">-{{ (house_balance * -1)|azn }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="emtk-bento-card">
+        <div class="emtk-bento-head">
+            <span class="icon-box"><span class="material-symbols-outlined">account_balance</span></span>
+            <div class="emtk-bento-main">
+                <p class="label">Ümumi balans</p>
+                <div class="value-row">
+                    <span class="value">{{ house_balance|azn }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="emtk-bento-grid mb-4" style="grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));">
+    <a href="{{ url_for('admin_expenses') }}" class="emtk-bento-card emtk-bento-card--link emtk-bento-card--dash-accent-green text-decoration-none text-reset" aria-label="Xərclər">
+        <div class="emtk-bento-head">
+            <span class="icon-box"><span class="material-symbols-outlined">paid</span></span>
+            <div class="emtk-bento-main">
+                <p class="label">Xərclər (ödənilmiş)</p>
+                <div class="value-row">
+                    <span class="value">{{ paid_expenses_total|azn }}</span>
+                </div>
+            </div>
+        </div>
+    </a>
+    <a href="{{ url_for('admin_expenses') }}" class="emtk-bento-card emtk-bento-card--link {% if unpaid_expenses_total > 0 %}emtk-bento-card--dash-accent-warn-amber{% else %}emtk-bento-card--dash-accent-green{% endif %} text-decoration-none text-reset" aria-label="Xərclər">
+        <div class="emtk-bento-head">
+            <span class="icon-box"><span class="material-symbols-outlined">pending_actions</span></span>
+            <div class="emtk-bento-main">
+                <p class="label">Xərclər (ödənilməmiş)</p>
+                <div class="value-row">
+                    <span class="value">{{ unpaid_expenses_total|azn }}</span>
+                    {% if unpaid_expenses_total > 0 %}
+                    <span class="pill pill--danger">Gözləyir</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </a>
+</div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <div class="emtk-surface-xl h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h6 fw-bold emtk-display mb-0">İş jurnalı</h2>
+                <a href="{{ url_for('admin_content', type='work') }}" class="small text-decoration-none text-secondary">Hamısı</a>
+            </div>
+            <div class="emtk-feed">
+                {% for w in dashboard_works %}
+                <div class="emtk-feed-item">
+                    <span class="dot"></span>
+                    <div class="body">
+                        <div class="fw-medium">{{ w.title }}</div>
+                        <div class="meta">{{ w.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                    </div>
+                </div>
                 {% else %}
-                <tr><td colspan="2" class="text-muted">Melumat yoxdur.</td></tr>
+                <div class="text-secondary small">Qeyd yoxdur.</div>
                 {% endfor %}
-            </tbody>
-        </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="emtk-surface-xl emtk-surface-xl--tinted h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h6 fw-bold emtk-display mb-0">Elanlar</h2>
+                <a href="{{ url_for('admin_content', type='announcement') }}" class="small text-decoration-none text-secondary">Hamısı</a>
+            </div>
+            <div class="emtk-feed">
+                {% for ann in dashboard_announcements %}
+                <div class="emtk-feed-item">
+                    <span class="dot"></span>
+                    <div class="body">
+                        <div class="fw-medium">{{ ann.title }}</div>
+                        <div class="meta">{{ ann.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-secondary small">Elan yoxdur.</div>
+                {% endfor %}
+            </div>
+        </div>
     </div>
 </div>
 
-<div class="card border-0 shadow-sm">
-    <div class="card-body">
-        <h5>Son əməliyyatlar (Audit)</h5>
-        <ul class="list-group list-group-flush">
-            {% for log in recent_logs %}
-            <li class="list-group-item px-0 d-flex justify-content-between">
-                <span>{{ log.action }}</span>
-                <span class="text-muted small">{{ log.created_at.strftime('%d.%m %H:%M') }}</span>
-            </li>
-            {% else %}
-            <li class="list-group-item px-0 text-muted">Bosdur.</li>
-            {% endfor %}
-        </ul>
+<div class="card border-0 mb-4">
+    <div class="card-body p-4">
+        <h2 class="h6 fw-bold emtk-display mb-3">Balans artırma</h2>
+        <form method="post" action="{{ url_for('balance_topup') }}" class="row g-2 align-items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-md-2">
+                <label class="form-label small">Məbləğ</label>
+                <input class="form-control" type="number" step="0.01" min="0.01" max="9999" name="amount" required>
+            </div>
+            <div class="col-md-8">
+                <label class="form-label small">Şərh</label>
+                <input class="form-control" name="comment" placeholder="Məs: Sponsor, əlavə yığım, ...">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-success w-100 emtk-btn-medxil">Mədaxil</button>
+            </div>
+        </form>
+        <div class="small text-secondary mt-2">Ümumi balansa əlavə olunur.</div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="emtk-surface-xl h-100 mb-4">
+            <div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h6 fw-bold emtk-display mb-0">Son ödənişlər</h2>
+                    <span class="text-secondary" style="font-size:0.7rem;">Seçilmiş aralıq</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="emtk-table">
+                        <thead>
+                            <tr><th class="text-center">Mənzil</th><th>Period</th><th class="text-end">Məbləğ</th><th>Tarix</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for r in payment_table %}
+                            <tr>
+                                <td class="text-center">
+                                    <span class="emtk-avatar emtk-avatar--{{ avatar_tone(r.apartment) }}" title="{{ r.apartment }}">{{ (r.apartment|string)[:2] }}</span>
+                                </td>
+                                <td>{{ r.period }}</td>
+                                <td class="text-end fw-bold">{{ r.amount|azn }}</td>
+                                <td class="text-secondary small">{{ r.date }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="text-secondary">Məlumat yoxdur.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="emtk-surface-xl emtk-surface-xl--tinted h-100 mb-4">
+            <div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h6 fw-bold emtk-display mb-0">Son əməliyyatlar</h2>
+                    <span class="text-secondary" style="font-size:0.7rem;">Audit</span>
+                </div>
+                <div class="emtk-feed">
+                    {% for log in recent_logs %}
+                    <div class="emtk-feed-item">
+                        <span class="dot"></span>
+                        <div class="body">
+                            <div>{{ log.action }}</div>
+                            <div class="meta">{{ log.created_at.strftime('%d.%m %H:%M') }}</div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-secondary small">Boşdur.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="emtk-surface-xl mt-4 mb-4">
+    <div>
+        <h2 class="h6 fw-bold emtk-display mb-3">Balans cədvəli</h2>
+        <div class="table-responsive">
+            <table class="emtk-table">
+                <thead><tr><th class="text-center">Mənzil</th><th class="text-end">Balans</th></tr></thead>
+                <tbody>
+                    {% for ap_no, debt in debt_by_apartment %}
+                    <tr>
+                        <td class="text-center">
+                            <span class="emtk-avatar emtk-avatar--{{ avatar_tone(ap_no) }}" title="{{ ap_no }}">{{ (ap_no|string)[:2] }}</span>
+                        </td>
+                        <td class="text-end">
+                            {% set d = debt or 0 %}
+                            {% if d > 0 %}
+                                <span class="text-danger fw-bold">{{ d|azn }}</span>
+                            {% elif d < 0 %}
+                                <span class="text-success fw-bold">+{{ (-d)|azn }}</span>
+                            {% else %}
+                                <span class="text-secondary">{{ 0|azn }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="2" class="text-secondary">Məlumat yoxdur.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 {% endblock %}
