@@ -18,7 +18,7 @@
     --emtk-secondary-text: #57657a;
     --bs-primary: #000000;
     --bs-primary-rgb: 0, 0, 0;
-    --bs-link-color: #00164e;
+    --bs-link-color: #004a99;
     --bs-link-hover-color: #000000;
     --bs-body-bg: #f6fafe;
     --bs-body-color: #171c1f;
@@ -1026,7 +1026,7 @@ td.emtk-invoice-actions-col {
 
 /* Komendant paneli: sol accent (primary-container, ~border-l-4) */
 .emtk-dashboard-bento .emtk-bento-card:not(.emtk-bento-card--balance-positive):not(.emtk-bento-card--balance-negative) {
-    border-left: 4px solid var(--emtk-primary-container, #00164e);
+    border-left: 4px solid var(--emtk-primary-container, #004a99);
 }
 
 .emtk-dashboard-bento .emtk-bento-card--balance-positive {
@@ -1145,7 +1145,7 @@ a.emtk-bento-card.emtk-bento-card--link:focus-visible {
 
 .emtk-bento-card .pill--success { color: #028fb0; }
 .emtk-bento-card .pill--danger  { color: #ba1a1a; background: #ffdad6; }
-.emtk-bento-card .pill--info    { color: #00164e; }
+.emtk-bento-card .pill--info    { color: #004a99; }
 
 .emtk-bento-card--dark {
     background: var(--emtk-primary);
@@ -1356,7 +1356,7 @@ a.emtk-bento-card.emtk-bento-card--link:focus-visible {
     border-radius: 1rem;
     padding: 1.5rem;
     color: #fff;
-    background: linear-gradient(135deg, #00164e 0%, #000000 100%);
+    background: linear-gradient(135deg, #004a99 0%, #000000 100%);
     overflow: hidden;
 }
 
@@ -1405,7 +1405,7 @@ a.emtk-bento-card.emtk-bento-card--link:focus-visible {
 }
 
 .emtk-avatar--a { background: #d5e3fc; color: #0d1c2e; }
-.emtk-avatar--b { background: #dce1ff; color: #00164e; }
+.emtk-avatar--b { background: #dce1ff; color: #004a99; }
 .emtk-avatar--c { background: #b7eaff; color: #001f28; }
 .emtk-avatar--d { background: #ffdad6; color: #93000a; }
 .emtk-avatar--e { background: #e4e9ed; color: #171c1f; }
