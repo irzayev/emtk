@@ -46,53 +46,126 @@
 </div>
 {% endif %}
 
-<div class="emtk-stat-grid mb-4" style="grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));">
-    <div class="card metric-card border-0"><div class="card-body p-4">
-        <div class="text-secondary small text-uppercase fw-semibold" style="font-size:0.65rem;letter-spacing:0.08em;">Mənzil</div>
-        <div class="h5 mb-0 emtk-display mt-2 fw-bold">
-            {% if apartment %}
-                {% if apartment.building %}{{ apartment.building.name }} / {% endif %}{{ apartment.number }}
-            {% else %}Təyin edilməyib{% endif %}
+<div class="emtk-dashboard-bento">
+    <div class="emtk-bento-grid mb-4" style="grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));">
+        <div class="emtk-bento-card">
+            <div class="emtk-bento-head">
+                <span class="icon-box"><span class="material-symbols-outlined">apartment</span></span>
+                <div class="emtk-bento-main">
+                    <p class="label">Mənzil</p>
+                    <div class="value-row">
+                        <span class="value" style="font-size:clamp(0.95rem,2.2vw,1.35rem);line-height:1.2;">
+                            {% if apartment %}
+                                {% if apartment.building %}{{ apartment.building.name }} / {% endif %}{{ apartment.number }}
+                            {% else %}Təyin edilməyib{% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
         </div>
-    </div></div>
-    <div class="card metric-card border-0"><div class="card-body p-4">
-        <div class="text-secondary small text-uppercase fw-semibold" style="font-size:0.65rem;letter-spacing:0.08em;">Sahə</div>
-        <div class="h5 mb-0 emtk-display mt-2 fw-bold">{{ apartment.area|int if apartment else 0 }} м²</div>
-    </div></div>
-    <div class="card metric-card border-0"><div class="card-body p-4">
-        <div class="text-secondary small text-uppercase fw-semibold" style="font-size:0.65rem;letter-spacing:0.08em;">Balans</div>
-        {% if debt > 0 %}
-            <div class="h5 mb-0 text-danger emtk-display mt-2 fw-bold">{{ debt|azn }}</div>
-        {% elif debt < 0 %}
-            <div class="h5 mb-0 text-success emtk-display mt-2 fw-bold">+{{ (-debt)|azn }}</div>
-        {% else %}
-            <div class="h5 mb-0 text-secondary emtk-display mt-2 fw-bold">{{ 0|azn }}</div>
-        {% endif %}
-    </div></div>
-    <div class="card metric-card border-0"><div class="card-body p-4">
-        <div class="text-secondary small text-uppercase fw-semibold" style="font-size:0.65rem;letter-spacing:0.08em;">Ümumi balans (bina)</div>
+        <div class="emtk-bento-card">
+            <div class="emtk-bento-head">
+                <span class="icon-box"><span class="material-symbols-outlined">square_foot</span></span>
+                <div class="emtk-bento-main">
+                    <p class="label">Sahə</p>
+                    <div class="value-row">
+                        <span class="value">{{ apartment.area|int if apartment else 0 }} м²</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="emtk-bento-card{% if debt > 0 %} emtk-bento-card--dash-accent-debt-red{% elif debt < 0 %} emtk-bento-card--dash-accent-green{% endif %}">
+            <div class="emtk-bento-head">
+                <span class="icon-box"><span class="material-symbols-outlined">account_balance_wallet</span></span>
+                <div class="emtk-bento-main">
+                    <p class="label">Balans</p>
+                    <div class="value-row">
+                        {% if debt > 0 %}
+                            <span class="value emtk-bento-value--danger">{{ debt|azn }}</span>
+                            <span class="pill pill--danger">Borc</span>
+                        {% elif debt < 0 %}
+                            <span class="value" style="color:#198754;">+{{ (-debt)|azn }}</span>
+                            <span class="pill pill--success">Kredit</span>
+                        {% else %}
+                            <span class="value">{{ 0|azn }}</span>
+                            <span class="pill">Təmiz</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
         {% if house_balance > 0 %}
-            <div class="h5 mb-0 text-success emtk-display mt-2 fw-bold">+{{ house_balance|azn }}</div>
+        <div class="emtk-bento-card emtk-bento-card--balance-positive">
+            <div class="emtk-bento-head">
+                <span class="icon-box"><span class="material-symbols-outlined">trending_up</span></span>
+                <div class="emtk-bento-main">
+                    <p class="label">Ümumi balans (bina)</p>
+                    <div class="value-row">
+                        <span class="value">+{{ house_balance|azn }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
         {% elif house_balance < 0 %}
-            <div class="h5 mb-0 text-danger emtk-display mt-2 fw-bold">-{{ (house_balance * -1)|azn }}</div>
+        <div class="emtk-bento-card emtk-bento-card--balance-negative">
+            <div class="emtk-bento-head">
+                <span class="icon-box"><span class="material-symbols-outlined">trending_down</span></span>
+                <div class="emtk-bento-main">
+                    <p class="label">Ümumi balans (bina)</p>
+                    <div class="value-row">
+                        <span class="value">-{{ (house_balance * -1)|azn }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
         {% else %}
-            <div class="h5 mb-0 text-secondary emtk-display mt-2 fw-bold">{{ house_balance|azn }}</div>
+        <div class="emtk-bento-card">
+            <div class="emtk-bento-head">
+                <span class="icon-box"><span class="material-symbols-outlined">account_balance</span></span>
+                <div class="emtk-bento-main">
+                    <p class="label">Ümumi balans (bina)</p>
+                    <div class="value-row">
+                        <span class="value">{{ house_balance|azn }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
         {% endif %}
-    </div></div>
-    <div class="card metric-card border-0"><div class="card-body p-4">
-        <div class="text-secondary small text-uppercase fw-semibold" style="font-size:0.65rem;letter-spacing:0.08em;">Ümumi borc (bina)</div>
-        {% if house_total_debt > 0 %}
-            <div class="h5 mb-0 text-danger emtk-display mt-2 fw-bold">{{ house_total_debt|azn }}</div>
-        {% elif house_total_debt < 0 %}
-            <div class="h5 mb-0 text-success emtk-display mt-2 fw-bold">+{{ (house_total_debt * -1)|azn }}</div>
-        {% else %}
-            <div class="h5 mb-0 text-secondary emtk-display mt-2 fw-bold">{{ house_total_debt|azn }}</div>
-        {% endif %}
-    </div></div>
-    <div class="card metric-card border-0"><div class="card-body p-4">
-        <div class="text-secondary small text-uppercase fw-semibold" style="font-size:0.65rem;letter-spacing:0.08em;">Ödənilməmiş xərclər</div>
-        <div class="h5 mb-0 text-danger emtk-display mt-2 fw-bold">{{ (unpaid_expenses or 0)|azn }}</div>
-    </div></div>
+        <div class="emtk-bento-card{% if house_total_debt > 0 %} emtk-bento-card--dash-accent-debt-red{% elif house_total_debt < 0 %} emtk-bento-card--dash-accent-green{% endif %}">
+            <div class="emtk-bento-head">
+                <span class="icon-box"><span class="material-symbols-outlined">trending_down</span></span>
+                <div class="emtk-bento-main">
+                    <p class="label">Ümumi borc (bina)</p>
+                    <div class="value-row">
+                        {% if house_total_debt > 0 %}
+                            <span class="value emtk-bento-value--danger">{{ house_total_debt|azn }}</span>
+                            <span class="pill pill--danger">Borc</span>
+                        {% elif house_total_debt < 0 %}
+                            <span class="value" style="color:#198754;">+{{ (house_total_debt * -1)|azn }}</span>
+                            <span class="pill pill--success">Artıq</span>
+                        {% else %}
+                            <span class="value">{{ house_total_debt|azn }}</span>
+                            <span class="pill">Təmiz</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="emtk-bento-card{% if (unpaid_expenses or 0) > 0 %} emtk-bento-card--dash-accent-warn-amber{% else %} emtk-bento-card--dash-accent-green{% endif %}">
+            <div class="emtk-bento-head">
+                <span class="icon-box"><span class="material-symbols-outlined">pending_actions</span></span>
+                <div class="emtk-bento-main">
+                    <p class="label">Ödənilməmiş xərclər</p>
+                    <div class="value-row">
+                        <span class="value{% if (unpaid_expenses or 0) > 0 %} emtk-bento-value--danger{% endif %}">{{ (unpaid_expenses or 0)|azn }}</span>
+                        {% if (unpaid_expenses or 0) > 0 %}
+                        <span class="pill pill--danger">Gözləyir</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="card border-0 mb-4">
