@@ -1,4 +1,1576 @@
-/* App-specific bits on top of emtk-stitch.css */
+/* eMTK — design tokens, layout, Bootstrap bridge; app overrides at end */
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap");
+
+:root,
+[data-bs-theme="light"] {
+    --emtk-surface: #f6fafe;
+    --emtk-surface-low: #f0f4f8;
+    --emtk-surface-lowest: #ffffff;
+    --emtk-surface-high: #e4e9ed;
+    --emtk-surface-highest: #dfe3e7;
+    --emtk-on-surface: #171c1f;
+    --emtk-on-surface-variant: #45464d;
+    --emtk-primary: #00346f;
+    --emtk-primary-container: #004a99;
+    --emtk-outline-variant: #c6c6cd;
+    --emtk-error: #ba1a1a;
+    --emtk-success-tone: #028fb0;
+    --emtk-secondary-text: #57657a;
+    --bs-primary: #000000;
+    --bs-primary-rgb: 0, 0, 0;
+    --bs-link-color: #004a99;
+    --bs-link-hover-color: #000000;
+    --bs-body-bg: #f6fafe;
+    --bs-body-color: #171c1f;
+    --bs-secondary-color: #57657a;
+    --bs-secondary-bg: #f0f4f8;
+    --bs-tertiary-bg: #e4e9ed;
+    --bs-border-color: transparent;
+    --bs-border-radius: 0.5rem;
+    --bs-border-radius-lg: 1rem;
+    --bs-border-radius-xl: 1.25rem;
+}
+
+/* Users table: komendant must not use --bs-primary (black in this theme) */
+.emtk-role-badge--komendant {
+    background-color: #198754 !important;
+    color: #fff !important;
+}
+
+[data-bs-theme="dark"] {
+    --emtk-surface: #0f172a;
+    --emtk-surface-low: #1e293b;
+    --emtk-surface-lowest: #1e293b;
+    --emtk-surface-high: #334155;
+    --emtk-surface-highest: #475569;
+    --emtk-on-surface: #f1f5f9;
+    --emtk-on-surface-variant: #94a3b8;
+    --bs-body-bg: #0f172a;
+    --bs-body-color: #f1f5f9;
+    --bs-secondary-bg: #1e293b;
+    --bs-tertiary-bg: #334155;
+}
+
+body.emtk-app-body {
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    background-color: var(--emtk-surface);
+    color: var(--emtk-on-surface);
+    min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.navbar-brand,
+.emtk-display {
+    font-family: "Manrope", "Inter", system-ui, sans-serif;
+    letter-spacing: -0.02em;
+}
+
+.material-symbols-outlined {
+    font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+    font-size: 1.25rem;
+    vertical-align: middle;
+}
+
+.material-symbols-outlined.filled {
+    font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* ——— App shell ——— */
+.emtk-sidebar {
+    width: 16.5rem;
+    min-height: 100vh;
+    background: var(--emtk-surface-low);
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 1040;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem 0.75rem;
+    transition: transform 0.2s ease;
+}
+
+[data-bs-theme="dark"] .emtk-sidebar {
+    background: #0f172a;
+    border-right: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.emtk-sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0.75rem 1.25rem;
+    text-decoration: none;
+    color: inherit;
+}
+
+.emtk-sidebar-brand-mark {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
+    background: linear-gradient(135deg, var(--emtk-primary), var(--emtk-primary-container));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+}
+
+.emtk-sidebar-brand h1 {
+    font-size: 1.35rem;
+    font-weight: 800;
+    margin: 0;
+    line-height: 1.1;
+}
+
+.emtk-sidebar-brand small {
+    display: block;
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--emtk-secondary-text);
+}
+
+.emtk-sidebar-nav {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    overflow-y: auto;
+}
+
+.emtk-sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 1rem;
+    border-radius: 0.375rem;
+    text-decoration: none;
+    color: var(--emtk-on-surface-variant);
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: none;
+    background: transparent;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.emtk-sidebar-link:hover {
+    background: var(--emtk-surface-high);
+    color: var(--emtk-on-surface);
+}
+
+.emtk-sidebar-link.active {
+    background: linear-gradient(90deg, var(--emtk-primary), var(--emtk-primary-container));
+    color: #fff !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.emtk-sidebar-link.active .material-symbols-outlined {
+    color: #fff;
+}
+
+.emtk-sidebar-foot-stack {
+    margin-top: auto;
+    padding-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+/* Sidebar: WhatsApp community link (system whatsapp_group_url) */
+.emtk-sidebar-foot-wa-group {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-family: "Manrope", "Inter", system-ui, sans-serif;
+    letter-spacing: -0.01em;
+    text-decoration: none;
+    color: #fff !important;
+    background-color: #198754;
+    border: 1px solid #157347;
+    box-shadow: 0 1px 2px rgba(0, 46, 26, 0.12);
+    transition: filter 0.15s ease, box-shadow 0.15s ease;
+}
+
+.emtk-sidebar-foot-wa-group:hover {
+    filter: brightness(1.03);
+    color: #fff !important;
+}
+
+.emtk-sidebar-foot-wa-group:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 0.2rem rgba(25, 135, 84, 0.35), 0 1px 2px rgba(0, 46, 26, 0.12);
+}
+
+[data-bs-theme="dark"] .emtk-sidebar-foot-wa-group {
+    background-color: #157347;
+    border-color: #146c43;
+}
+
+/* Sidebar footer: “Texniki Dəstək” → WhatsApp (system contact_phone) */
+.emtk-sidebar-foot-support {
+    --emtk-support-wa-bg: #f0cc3a;
+    --emtk-support-wa-fg: #2a2200;
+    --emtk-support-wa-border: #d4b020;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-family: "Manrope", "Inter", system-ui, sans-serif;
+    letter-spacing: -0.01em;
+    text-decoration: none;
+    color: var(--emtk-support-wa-fg) !important;
+    background-color: var(--emtk-support-wa-bg);
+    border: 1px solid var(--emtk-support-wa-border);
+    box-shadow: 0 1px 2px rgba(42, 34, 0, 0.08);
+    transition: filter 0.15s ease, box-shadow 0.15s ease;
+}
+
+.emtk-sidebar-foot-support:hover {
+    filter: brightness(0.97);
+    color: var(--emtk-support-wa-fg) !important;
+}
+
+.emtk-sidebar-foot-support:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 0.2rem rgba(240, 204, 58, 0.45), 0 1px 2px rgba(42, 34, 0, 0.08);
+}
+
+.emtk-sidebar-foot-support--disabled {
+    opacity: 0.48;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+[data-bs-theme="dark"] .emtk-sidebar-foot-support {
+    --emtk-support-wa-bg: #e6b422;
+    --emtk-support-wa-fg: #1a1500;
+    --emtk-support-wa-border: #c9a01e;
+}
+
+/* Admin invoices: grouped column titles */
+.emtk-invoice-group-head {
+    background: color-mix(in srgb, var(--emtk-surface-high) 88%, var(--emtk-on-surface));
+    font-family: "Manrope", "Inter", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+    color: var(--emtk-on-surface-variant);
+    vertical-align: middle;
+}
+
+[data-bs-theme="dark"] .emtk-invoice-group-head {
+    background: color-mix(in srgb, var(--emtk-surface-high) 70%, transparent);
+}
+
+/* Hesab-fakturalar / Qəbz: ikon düymələri həmişə bir sırada (ekran dar olanda cədvəl üfüqi scroll) */
+th.emtk-invoice-actions-col,
+td.emtk-invoice-actions-col {
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.emtk-invoice-actions {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+}
+
+.emtk-invoice-actions > .btn,
+.emtk-invoice-actions > form {
+    flex-shrink: 0;
+}
+
+.emtk-main {
+    margin-left: 16.5rem;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--emtk-surface);
+}
+
+.emtk-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    background: color-mix(in srgb, var(--emtk-surface) 82%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.emtk-topbar-user {
+    text-align: right;
+}
+
+.emtk-topbar-user strong {
+    font-size: 0.9rem;
+    display: block;
+    line-height: 1.2;
+}
+
+.emtk-topbar-user span {
+    font-size: 0.625rem;
+    color: var(--emtk-secondary-text);
+    font-weight: 600;
+}
+
+.emtk-topbar-user-dropdown .dropdown-toggle {
+    box-shadow: none !important;
+}
+
+.emtk-topbar-user-dropdown .dropdown-toggle::after {
+    margin-left: 0.2rem;
+    opacity: 0.5;
+}
+
+.emtk-topbar-user-dropdown .dropdown-menu {
+    background: var(--emtk-surface-lowest);
+    border: none;
+}
+
+[data-bs-theme="dark"] .emtk-topbar-user-dropdown .dropdown-menu {
+    background: #1e293b;
+}
+
+.emtk-topbar-user-dropdown .dropdown-item.active {
+    background: var(--emtk-surface-high);
+    color: inherit;
+}
+
+/* Admin users: sortable column headers */
+.emtk-sort-th {
+    white-space: nowrap;
+    vertical-align: middle;
+}
+.emtk-sort-th-link:hover {
+    color: var(--emtk-primary, #0d6efd) !important;
+}
+.emtk-sort-th.text-center .emtk-sort-th-link {
+    width: 100%;
+    justify-content: center;
+}
+
+/* İstifadəçilər / Xərclər / Tariflər cədvəlləri: növbə ilə ağ / surface-low (collapse sətri eyni rəngdə) */
+.table.emtk-users-table tbody tr,
+.table.emtk-expenses-table tbody tr,
+.table.emtk-tariffs-table tbody tr {
+    border-radius: 0 !important;
+}
+
+.table.emtk-users-table tbody tr.emtk-users-stripe-0,
+.table.emtk-expenses-table tbody tr.emtk-users-stripe-0,
+.table.emtk-tariffs-table tbody tr.emtk-users-stripe-0 {
+    background: var(--emtk-surface-lowest) !important;
+}
+
+.table.emtk-users-table tbody tr.emtk-users-stripe-1,
+.table.emtk-expenses-table tbody tr.emtk-users-stripe-1,
+.table.emtk-tariffs-table tbody tr.emtk-users-stripe-1 {
+    background: var(--emtk-surface-low) !important;
+}
+
+/* User menu: same icon column width so rows align; menu padding unified (no per-item mx shift) */
+.emtk-user-dropdown-menu .emtk-user-dropdown-icon {
+    width: 1.375rem;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.emtk-content {
+    flex: 1;
+    padding: 0 1.5rem 2rem;
+    max-width: 160rem;
+}
+
+.emtk-sidebar-toggle {
+    display: none;
+}
+
+@media (max-width: 991.98px) {
+    .emtk-sidebar-toggle {
+        display: inline-flex;
+    }
+
+    .emtk-sidebar {
+        transform: translateX(-100%);
+    }
+
+    .emtk-sidebar.emtk-sidebar--open {
+        transform: translateX(0);
+        box-shadow: 0 0 40px rgba(15, 23, 42, 0.15);
+    }
+
+    .emtk-main {
+        margin-left: 0;
+    }
+}
+
+.emtk-sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1035;
+    background: rgba(15, 23, 42, 0.45);
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+.emtk-sidebar-overlay[hidden] {
+    display: none !important;
+}
+
+/* ——— Auth (login / register) full layout ——— */
+.emtk-auth-body {
+    min-height: 100vh;
+    background: var(--emtk-surface);
+    font-family: "Inter", system-ui, sans-serif;
+}
+
+.emtk-auth-blob-a {
+    position: fixed;
+    top: -10%;
+    left: -10%;
+    width: 40%;
+    height: 40%;
+    border-radius: 50%;
+    background: #dce1ff;
+    opacity: 0.22;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.emtk-auth-blob-b {
+    position: fixed;
+    top: 55%;
+    right: -5%;
+    width: 35%;
+    height: 35%;
+    border-radius: 50%;
+    background: #d5e3fc;
+    opacity: 0.2;
+    filter: blur(100px);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.emtk-auth-card {
+    position: relative;
+    z-index: 1;
+    background: var(--emtk-surface-lowest);
+    border-radius: 0.75rem;
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.12);
+    overflow: hidden;
+}
+
+.emtk-auth-hero {
+    position: relative;
+    min-height: 22rem;
+    overflow: hidden;
+    background: var(--emtk-surface-low);
+}
+
+@media (min-width: 992px) {
+    .emtk-auth-hero {
+        min-height: auto;
+    }
+}
+
+.emtk-auth-hero-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.emtk-auth-hero-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.45), transparent);
+    z-index: 1;
+}
+
+.emtk-auth-hero-panel {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    padding: 1.5rem;
+}
+
+@media (min-width: 992px) {
+    .emtk-auth-hero-panel {
+        padding: 2.5rem;
+    }
+}
+
+[data-bs-theme="dark"] .emtk-auth-hero-panel .emtk-auth-hero-title {
+    color: #dee2e6;
+}
+
+/* Auth input wrapper with leading icon (stitch-style) */
+.emtk-input {
+    position: relative;
+}
+
+.emtk-input > .material-symbols-outlined {
+    position: absolute;
+    top: 50%;
+    left: 0.9rem;
+    transform: translateY(-50%);
+    color: var(--emtk-secondary-text);
+    pointer-events: none;
+    font-size: 1.15rem;
+    transition: color 0.15s ease;
+}
+
+.emtk-input > .form-control,
+.emtk-input > .form-select {
+    padding-left: 2.5rem !important;
+    padding-top: 0.9rem !important;
+    padding-bottom: 0.9rem !important;
+    background: var(--emtk-surface-high) !important;
+    border-radius: 0.75rem !important;
+}
+
+.emtk-input:focus-within > .material-symbols-outlined {
+    color: var(--emtk-primary-container);
+}
+
+/* Auth: phone prefix + field — same vertical rhythm as .emtk-input, clear gap at join */
+.emtk-auth-card .input-group:not(.input-group-sm) {
+    align-items: stretch;
+    border-radius: 0.75rem;
+    overflow: hidden;
+}
+
+.emtk-auth-card .input-group:not(.input-group-sm) > .input-group-text {
+    display: flex;
+    align-items: center;
+    padding: 0.9rem 0.95rem 0.9rem 1rem !important;
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 0.02em;
+    border-radius: 0 !important;
+    border-top-left-radius: 0.75rem !important;
+    border-bottom-left-radius: 0.75rem !important;
+    flex-shrink: 0;
+    border-right: 1px solid rgba(15, 23, 42, 0.1) !important;
+}
+
+[data-bs-theme="dark"] .emtk-auth-card .input-group:not(.input-group-sm) > .input-group-text {
+    border-right-color: rgba(148, 163, 184, 0.22) !important;
+}
+
+.emtk-auth-card .input-group:not(.input-group-sm) > .form-control {
+    padding: 0.9rem 1rem 0.9rem 1rem !important;
+    border-radius: 0 !important;
+    border-top-right-radius: 0.75rem !important;
+    border-bottom-right-radius: 0.75rem !important;
+    line-height: 1.5;
+}
+
+/* Qeydiyyat: one column fields same rhythm as .emtk-input / phone group */
+.emtk-auth-register-form > .mb-3 > .form-control,
+.emtk-auth-register-form > .mb-4 > .form-control,
+.emtk-auth-register-form .row .form-control {
+    padding: 0.9rem 1rem !important;
+    border-radius: 0.75rem !important;
+    line-height: 1.5;
+}
+
+.emtk-auth-register-back {
+    padding: 0.9rem 1.25rem !important;
+    border-radius: 0.75rem !important;
+    font-weight: 700;
+    font-family: "Manrope", sans-serif;
+    font-size: 1rem;
+    line-height: 1.25;
+    align-self: stretch;
+}
+
+/* Sakin paneli: İş jurnalı / Elanlar — Bootstrap carousel */
+.emtk-resident-carousel {
+    position: relative;
+    padding-bottom: 2.75rem;
+}
+
+/* Bir slayd = bir qeyd: üfüqi sürüşmə iki slaydı yan-yana göstərməsin, uzun mətn slaydın içində scroll olsun */
+.emtk-resident-carousel.carousel-fade .carousel-item {
+    transition-property: opacity;
+}
+
+.emtk-resident-carousel .carousel-item > .rounded-4 {
+    max-height: clamp(14rem, 58vh, 32rem);
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+.emtk-resident-carousel__control {
+    width: 2.25rem;
+    height: 2.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    bottom: auto;
+    opacity: 1;
+    border-radius: 9999px;
+    background: rgba(15, 23, 42, 0.45) !important;
+    border: none;
+}
+
+[data-bs-theme="dark"] .emtk-resident-carousel__control {
+    background: rgba(0, 0, 0, 0.5) !important;
+}
+
+.emtk-resident-carousel__control:hover,
+.emtk-resident-carousel__control:focus {
+    background: rgba(15, 23, 42, 0.65) !important;
+}
+
+.emtk-resident-carousel__control .carousel-control-prev-icon,
+.emtk-resident-carousel__control .carousel-control-next-icon {
+    width: 1.1rem;
+    height: 1.1rem;
+    filter: invert(1) grayscale(100%);
+}
+
+.emtk-resident-carousel__control.carousel-control-prev {
+    left: 0.35rem;
+}
+
+.emtk-resident-carousel__control.carousel-control-next {
+    right: 0.35rem;
+}
+
+.emtk-resident-carousel__indicators {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    justify-content: center;
+    gap: 0.35rem;
+}
+
+.emtk-resident-carousel__indicators [data-bs-target] {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 9999px;
+    border: none;
+    margin: 0;
+    background-color: rgba(15, 23, 42, 0.25);
+}
+
+[data-bs-theme="dark"] .emtk-resident-carousel__indicators [data-bs-target] {
+    background-color: rgba(255, 255, 255, 0.35);
+}
+
+.emtk-resident-carousel__indicators [data-bs-target].active {
+    background-color: var(--emtk-primary-container);
+    transform: scale(1.15);
+}
+
+/* Primary CTA (auth) */
+.emtk-btn-cta {
+    background: linear-gradient(90deg, var(--emtk-primary), var(--emtk-primary-container)) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 0.75rem !important;
+    padding: 0.9rem 1.25rem !important;
+    font-weight: 700;
+    font-family: "Manrope", sans-serif;
+    box-shadow: 0 16px 28px -10px rgba(0, 22, 78, 0.35);
+    transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.emtk-btn-cta:hover { opacity: 0.92; color: #fff; }
+.emtk-btn-cta:active { transform: scale(0.985); }
+
+.emtk-glass-panel {
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 1.5rem;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+}
+
+[data-bs-theme="dark"] .emtk-glass-panel {
+    background: rgba(30, 41, 59, 0.85);
+    border-color: rgba(148, 163, 184, 0.15);
+}
+
+/* ——— Cards & surfaces (no hard borders) ——— */
+.card {
+    border: none !important;
+    border-radius: 1.25rem !important;
+    background: var(--emtk-surface-lowest) !important;
+    box-shadow: none !important;
+}
+
+.card.metric-card {
+    background: var(--emtk-surface-lowest) !important;
+    transition: transform 0.15s ease;
+}
+
+.card.metric-card:hover {
+    transform: translateY(-2px);
+}
+
+.list-group-item {
+    border-color: transparent !important;
+    background: transparent !important;
+}
+
+/* ——— Buttons ——— */
+.btn-primary {
+    background: linear-gradient(90deg, var(--emtk-primary), var(--emtk-primary-container)) !important;
+    border: none !important;
+    font-weight: 600;
+}
+
+.btn-primary:hover {
+    opacity: 0.92;
+}
+
+/* Yadda saxla — solid success green */
+.btn-emtk-save {
+    background-color: #198754 !important;
+    border: none !important;
+    color: #fff !important;
+    font-weight: 600;
+}
+
+.btn-emtk-save:hover,
+.btn-emtk-save:focus {
+    background-color: #157347 !important;
+    color: #fff !important;
+}
+
+.btn-emtk-save:active {
+    background-color: #146c43 !important;
+    color: #fff !important;
+}
+
+.btn-emtk-save:focus {
+    box-shadow: 0 0 0 0.2rem rgba(25, 135, 84, 0.35) !important;
+}
+
+/* Bulk email (classic Bootstrap blue, theme primary is black) */
+.emtk-btn-bulk-email {
+    --bs-btn-bg: #0d6efd;
+    --bs-btn-border-color: #0d6efd;
+    --bs-btn-hover-bg: #0b5ed7;
+    --bs-btn-hover-border-color: #0a58ca;
+    --bs-btn-active-bg: #0a58ca;
+    --bs-btn-active-border-color: #0a53be;
+    --bs-btn-disabled-bg: #0d6efd;
+    --bs-btn-disabled-border-color: #0d6efd;
+    --bs-btn-color: #fff;
+    --bs-btn-hover-color: #fff;
+    --bs-btn-active-color: #fff;
+    --bs-btn-disabled-color: #fff;
+    border: none !important;
+    font-weight: 600;
+}
+
+.btn-outline-secondary {
+    border-color: color-mix(in srgb, var(--emtk-outline-variant) 35%, transparent) !important;
+    color: var(--emtk-on-surface-variant) !important;
+    background: transparent !important;
+}
+
+.btn-outline-secondary:hover {
+    background: var(--emtk-surface-high) !important;
+    border-color: var(--emtk-outline-variant) !important;
+    color: var(--emtk-on-surface) !important;
+}
+
+.btn-success {
+    border: none;
+    font-weight: 600;
+    --bs-btn-bg: #198754;
+    --bs-btn-border-color: #198754;
+    --bs-btn-hover-bg: #157347;
+    --bs-btn-hover-border-color: #157347;
+    --bs-btn-active-bg: #146c43;
+    --bs-btn-active-border-color: #146c43;
+    --bs-btn-disabled-bg: #198754;
+    --bs-btn-disabled-border-color: #198754;
+    --bs-btn-color: #fff;
+    --bs-btn-hover-color: #fff;
+    --bs-btn-active-color: #fff;
+    --bs-btn-disabled-color: #fff;
+}
+
+/* Mədaxil: bordered; override .btn-sm --bs-btn-border-radius (sm) so radius matches default controls */
+.btn-success.emtk-btn-medxil {
+    border: 1px solid var(--bs-btn-border-color);
+    --bs-btn-border-radius: var(--bs-border-radius);
+}
+
+.btn-outline-success {
+    --bs-btn-bg: transparent;
+    --bs-btn-color: #198754;
+    --bs-btn-border-color: #198754;
+    --bs-btn-hover-bg: #198754;
+    --bs-btn-hover-border-color: #198754;
+    --bs-btn-hover-color: #fff;
+    --bs-btn-active-bg: #157347;
+    --bs-btn-active-border-color: #157347;
+    --bs-btn-active-color: #fff;
+}
+
+/* Icon-only row actions (Material Symbols) */
+.emtk-icon-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.emtk-icon-btn .material-symbols-outlined {
+    font-size: 1.125rem;
+    vertical-align: middle;
+}
+
+/* Toolbar: text+bulk actions same height as .emtk-icon-btn */
+.emtk-toolbar-bulk-btn {
+    min-height: 2.25rem;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ——— Forms ——— */
+.form-control,
+.form-select {
+    background-color: var(--emtk-surface-highest) !important;
+    border: none !important;
+    border-radius: 0.5rem !important;
+    color: var(--emtk-on-surface) !important;
+}
+
+.form-control:focus,
+.form-select:focus {
+    box-shadow: 0 0 0 1px var(--emtk-primary) !important;
+    background-color: var(--emtk-surface-lowest) !important;
+}
+
+.input-group-text {
+    background: var(--emtk-surface-high) !important;
+    border: none !important;
+    color: var(--emtk-on-surface-variant) !important;
+}
+
+/* ——— Tables ——— */
+.table {
+    --bs-table-bg: transparent;
+    --bs-table-hover-bg: var(--emtk-surface-low);
+}
+
+.table thead th {
+    border: none !important;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--emtk-on-surface-variant) !important;
+    padding-top: 0.75rem;
+    padding-bottom: 0.5rem;
+}
+
+.table tbody td,
+.table tbody th {
+    border: none !important;
+    padding: 0.75rem 1rem;
+    vertical-align: middle;
+}
+
+.table tbody tr:nth-child(even) {
+    background: var(--emtk-surface-low);
+    border-radius: 0.5rem;
+}
+
+/* Bütün məlumat cədvəlləri: başlıq və hüceyrələr mərkəzdə */
+.table thead th,
+.table tbody td,
+.table tbody th {
+    text-align: center !important;
+}
+
+.table-responsive {
+    border-radius: 1rem;
+
+}
+
+/* ——— Alerts ——— */
+.alert {
+    border: none !important;
+    border-radius: 0.75rem !important;
+}
+
+/* ——— Nav pills (login tabs) ——— */
+.nav-pills .nav-link {
+    border-radius: 0.5rem !important;
+    font-weight: 600;
+    color: var(--emtk-on-surface-variant);
+}
+
+.nav-pills .nav-link.active {
+    background: linear-gradient(90deg, var(--emtk-primary), var(--emtk-primary-container)) !important;
+    color: #fff !important;
+}
+
+/* ——— Page headers inside legacy templates ——— */
+.emtk-page-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.emtk-page-head h3 {
+    margin: 0;
+    font-weight: 800;
+    font-size: 1.5rem;
+}
+
+.emtk-footer {
+    padding: 1rem 1.5rem;
+    font-size: 0.75rem;
+    color: var(--emtk-secondary-text);
+    text-align: center;
+}
+
+.emtk-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 1.25rem;
+}
+
+@media (min-width: 768px) {
+    .emtk-stat-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (min-width: 1200px) {
+    .emtk-stat-grid {
+        grid-template-columns: repeat(6, 1fr);
+    }
+}
+
+/* ——— Stitch bento cards (dashboard v2) ——— */
+
+.emtk-bento-grid {
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+    .emtk-bento-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 1200px) {
+    .emtk-bento-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+.emtk-bento-card {
+    background: var(--emtk-surface-lowest);
+    border-radius: 2rem;
+    padding: 1.5rem;
+    transition: transform 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 9.5rem;
+}
+
+/* Komendant paneli: sol accent (primary-container, ~border-l-4) */
+.emtk-dashboard-bento .emtk-bento-card:not(.emtk-bento-card--balance-positive):not(.emtk-bento-card--balance-negative) {
+    border-left: 4px solid var(--emtk-primary-container, #004a99);
+}
+
+.emtk-dashboard-bento .emtk-bento-card--balance-positive {
+    border-left: 4px solid rgba(255, 255, 255, 0.42);
+}
+
+.emtk-dashboard-bento .emtk-bento-card--balance-negative {
+    border-left: 4px solid rgba(255, 255, 255, 0.42);
+}
+
+/* Komendant paneli: kart üzrə sol accent rəngləri (:not ilə default border-dan güclü) */
+.emtk-dashboard-bento .emtk-bento-card.emtk-bento-card--dash-accent-green:not(.emtk-bento-card--balance-positive):not(.emtk-bento-card--balance-negative) {
+    border-left-color: #146c43;
+}
+
+.emtk-dashboard-bento .emtk-bento-card.emtk-bento-card--dash-accent-debt-red:not(.emtk-bento-card--balance-positive):not(.emtk-bento-card--balance-negative) {
+    border-left-color: #991b1b;
+}
+
+.emtk-dashboard-bento .emtk-bento-card.emtk-bento-card--dash-accent-warn-amber:not(.emtk-bento-card--balance-positive):not(.emtk-bento-card--balance-negative) {
+    border-left-color: #c19102;
+}
+
+.emtk-bento-card:hover { transform: translateY(-4px); }
+
+a.emtk-bento-card.emtk-bento-card--link {
+    color: inherit;
+    cursor: pointer;
+}
+
+a.emtk-bento-card.emtk-bento-card--link:focus-visible {
+    outline: 2px solid var(--emtk-primary, #0d6efd);
+    outline-offset: 3px;
+}
+
+/* İkon solda, mətn + dəyər sağda — bütün bento kartları */
+.emtk-bento-head {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+}
+
+.emtk-bento-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.emtk-bento-card .icon-box {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 1rem;
+    background: var(--emtk-surface-low);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--emtk-on-surface-variant);
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+.emtk-bento-card .label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--emtk-on-surface-variant);
+    margin: 0;
+}
+
+.emtk-bento-card .value-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.emtk-bento-card .value {
+    font-family: "Manrope", sans-serif;
+    font-weight: 800;
+    font-size: 1.75rem;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--emtk-on-surface);
+}
+
+.emtk-bento-card .value sup {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-left: 0.15rem;
+    top: -0.25rem;
+}
+
+.emtk-bento-card .value.emtk-bento-value--danger {
+    color: #ba1a1a;
+}
+
+[data-bs-theme="dark"] .emtk-bento-card .value.emtk-bento-value--danger {
+    color: #ffb4ab;
+}
+
+.emtk-bento-card .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.5rem;
+    background: var(--emtk-surface-low);
+    color: var(--emtk-on-surface-variant);
+    font-size: 0.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.emtk-bento-card .pill--success { color: #028fb0; }
+.emtk-bento-card .pill--danger  { color: #ba1a1a; background: #ffdad6; }
+.emtk-bento-card .pill--info    { color: #004a99; }
+
+.emtk-bento-card--dark {
+    background: var(--emtk-primary);
+    color: #fff;
+    justify-content: space-between;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.14);
+}
+
+.emtk-bento-card--dark:hover {
+    box-shadow: 0 24px 56px rgba(0, 0, 0, 0.2);
+}
+
+.emtk-bento-card--dark .kicker {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    opacity: 0.65;
+    margin-bottom: 0.5rem;
+}
+
+.emtk-bento-card--dark .title {
+    font-family: "Manrope", sans-serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.emtk-bento-card--dark .footrow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 1rem;
+    font-size: 0.7rem;
+    opacity: 0.8;
+}
+
+.emtk-bento-card--dark .chip {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Ümumi balans: positive / negative tone (not black) */
+.emtk-bento-card--balance-positive,
+.emtk-bento-card--balance-negative {
+    color: #fff;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12);
+}
+
+.emtk-bento-card--balance-positive {
+    background: linear-gradient(145deg, #047857 0%, #198754 55%, #0f766e 100%);
+}
+
+.emtk-bento-card--balance-negative {
+    background: linear-gradient(145deg, #b91c1c 0%, #991b1b 50%, #7f1d1d 100%);
+}
+
+.emtk-bento-card--balance-positive:hover,
+.emtk-bento-card--balance-negative:hover {
+    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.16);
+}
+
+.emtk-bento-card--balance-positive .icon-box,
+.emtk-bento-card--balance-negative .icon-box {
+    background: rgba(255, 255, 255, 0.22);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.emtk-bento-card--balance-positive .label,
+.emtk-bento-card--balance-negative .label {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.emtk-bento-card--balance-positive .value,
+.emtk-bento-card--balance-negative .value {
+    color: #fff;
+}
+
+[data-bs-theme="dark"] .emtk-bento-card--balance-positive {
+    background: linear-gradient(145deg, #059669 0%, #0d9488 55%, #047857 100%);
+}
+
+[data-bs-theme="dark"] .emtk-bento-card--balance-negative {
+    background: linear-gradient(145deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%);
+}
+
+/* Big surface (chart / notifications / table block) */
+.emtk-surface-xl {
+    background: var(--emtk-surface-lowest);
+    border-radius: 2.5rem;
+    padding: 2rem;
+}
+
+.emtk-surface-xl--tinted {
+    background: var(--emtk-surface-low);
+}
+
+[data-bs-theme="dark"] .emtk-bento-card:not(.emtk-bento-card--balance-positive):not(.emtk-bento-card--balance-negative):not(.emtk-bento-card--dark),
+[data-bs-theme="dark"] .emtk-surface-xl {
+    background: #1e293b;
+}
+
+[data-bs-theme="dark"] .emtk-bento-card:not(.emtk-bento-card--balance-positive):not(.emtk-bento-card--balance-negative) .icon-box,
+[data-bs-theme="dark"] .emtk-bento-card .pill {
+    background: #334155;
+    color: #cbd5e1;
+}
+
+[data-bs-theme="dark"] .emtk-bento-card--balance-positive .icon-box,
+[data-bs-theme="dark"] .emtk-bento-card--balance-negative .icon-box {
+    background: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+[data-bs-theme="dark"] .emtk-surface-xl--tinted {
+    background: #111827;
+}
+
+/* ——— Stitch v2 extras ——— */
+
+[data-bs-theme="dark"] .emtk-card-accent,
+[data-bs-theme="dark"] .emtk-chip.is-active {
+    background: #1e293b;
+}
+
+[data-bs-theme="dark"] .emtk-table thead th {
+    background: #1e293b;
+    color: #94a3b8;
+}
+
+[data-bs-theme="dark"] .emtk-table tbody tr:nth-child(even) {
+    background: rgba(30, 41, 59, 0.45);
+}
+
+[data-bs-theme="dark"] .emtk-table tbody tr:hover {
+    background: rgba(51, 65, 85, 0.55);
+}
+
+[data-bs-theme="dark"] .emtk-status {
+    background: rgba(30, 41, 59, 0.75);
+}
+
+[data-bs-theme="dark"] .emtk-status--success {
+    color: #75b798;
+    background: rgba(25, 135, 84, 0.2);
+}
+
+[data-bs-theme="dark"] .emtk-avatar--e {
+    background: #334155;
+    color: #f1f5f9;
+}
+
+/* Accent stat cards (left bar) */
+.emtk-card-accent {
+    position: relative;
+    background: var(--emtk-surface-lowest);
+    border-radius: 1rem;
+    padding: 1.25rem 1.25rem 1.25rem 1.5rem;
+    overflow: hidden;
+}
+
+.emtk-card-accent::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--accent, var(--emtk-primary-container));
+    border-radius: 0 4px 4px 0;
+}
+
+.emtk-card-accent--primary { --accent: var(--emtk-primary-container); }
+.emtk-card-accent--success { --accent: #028fb0; }
+.emtk-card-accent--danger  { --accent: #ba1a1a; }
+.emtk-card-accent--warn    { --accent: #b4802b; }
+.emtk-card-accent--neutral { --accent: #57657a; }
+
+.emtk-card-accent .label {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--emtk-on-surface-variant);
+}
+
+.emtk-card-accent .value {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+    font-family: "Manrope", sans-serif;
+    font-weight: 800;
+    font-size: 1.9rem;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+}
+
+/* Dark hero balance card */
+.emtk-hero-card {
+    position: relative;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    color: #fff;
+    background: linear-gradient(135deg, #004a99 0%, #000000 100%);
+    overflow: hidden;
+}
+
+.emtk-hero-card .label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.65;
+}
+
+.emtk-hero-card .value {
+    font-family: "Manrope", sans-serif;
+    font-weight: 800;
+    font-size: 2rem;
+    line-height: 1.1;
+    margin-top: 0.5rem;
+    letter-spacing: -0.02em;
+}
+
+.emtk-hero-card .watermark {
+    position: absolute;
+    right: -1.25rem;
+    bottom: -1.25rem;
+    font-size: 8rem;
+    opacity: 0.1;
+    transform: rotate(12deg);
+    pointer-events: none;
+}
+
+/* Avatar bubble with initials */
+.emtk-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: var(--emtk-surface-high);
+    color: var(--emtk-on-surface);
+    font-weight: 700;
+    font-size: 0.7rem;
+    font-family: "Inter", sans-serif;
+    flex-shrink: 0;
+    letter-spacing: 0;
+}
+
+.emtk-avatar--a { background: #d5e3fc; color: #0d1c2e; }
+.emtk-avatar--b { background: #dce1ff; color: #004a99; }
+.emtk-avatar--c { background: #b7eaff; color: #001f28; }
+.emtk-avatar--d { background: #ffdad6; color: #93000a; }
+.emtk-avatar--e { background: #e4e9ed; color: #171c1f; }
+
+/* Status pill with dot */
+.emtk-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    background: var(--emtk-surface-low);
+    color: var(--emtk-on-surface-variant);
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.emtk-status::before {
+    content: "";
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}
+
+.emtk-status--success { color: #0f5132; background: #d1e7dd; }
+.emtk-status--warn    { color: #57657a; }
+.emtk-status--danger  { color: #ba1a1a; background: #ffdad6; }
+.emtk-status--neutral { color: var(--emtk-on-surface-variant); }
+
+/* Filter chips row */
+.emtk-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.emtk-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.85rem;
+    border-radius: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: transparent;
+    color: var(--emtk-on-surface-variant);
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.emtk-chip:hover {
+    background: var(--emtk-surface-low);
+    color: var(--emtk-on-surface);
+}
+
+.emtk-chip.is-active {
+    background: var(--emtk-surface-high);
+    color: var(--emtk-on-surface);
+    font-weight: 700;
+}
+
+/* Table with avatar + subtitle */
+.emtk-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.emtk-table thead th {
+    background: var(--emtk-surface-low);
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--emtk-on-surface-variant);
+    padding: 0.9rem 1rem;
+    text-align: center !important;
+}
+
+.emtk-table tbody td {
+    padding: 0.9rem 1rem;
+    font-size: 0.85rem;
+    color: var(--emtk-on-surface);
+    vertical-align: middle;
+    text-align: center !important;
+}
+
+.emtk-table tbody tr {
+    transition: background 0.12s ease;
+}
+
+.emtk-table tbody tr:nth-child(even) {
+    background: color-mix(in srgb, var(--emtk-surface-low) 35%, transparent);
+}
+
+.emtk-table tbody tr:hover {
+    background: var(--emtk-surface-low);
+}
+
+.emtk-table .cell-title {
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--emtk-on-surface);
+}
+
+.emtk-table .cell-sub {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--emtk-on-surface-variant);
+    margin-top: 2px;
+}
+
+.emtk-row-actions {
+    display: inline-flex;
+    gap: 0.25rem;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.emtk-table tbody tr:hover .emtk-row-actions,
+.emtk-row-actions:focus-within {
+    opacity: 1;
+}
+
+/* Notification-style list item */
+.emtk-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.emtk-feed-item {
+    display: flex;
+    gap: 0.85rem;
+    align-items: flex-start;
+    padding: 0.25rem 0;
+}
+
+.emtk-feed-item .dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: var(--emtk-primary-container);
+    margin-top: 0.55rem;
+    flex-shrink: 0;
+}
+
+.emtk-feed-item .body {
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--emtk-on-surface);
+}
+
+.emtk-feed-item .meta {
+    font-size: 0.7rem;
+    color: var(--emtk-on-surface-variant);
+}
+
+/* App-specific overrides */
 
 main.container {
     flex: 1;
