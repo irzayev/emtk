@@ -6,7 +6,7 @@
         <p class="text-secondary small mb-0">Mənzil, balans və hesab-fakturalar.</p>
     </div>
 </div>
-{% if apartments %}
+{% if apartments|length > 1 %}
 <form method="post" action="{{ url_for('select_apartment') }}" class="mb-4 d-flex flex-wrap gap-2 align-items-center">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label class="small text-secondary mb-0">Mənzil seçimi</label>

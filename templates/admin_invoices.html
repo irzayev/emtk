@@ -107,7 +107,7 @@
                         <th class="text-nowrap">ödənilib</th>
                         <th class="text-nowrap">Balans</th>
                         <th class="text-nowrap">Status</th>
-                        <th class="text-nowrap">Tam ödəniş</th>
+                        <th class="text-nowrap">Ödə</th>
                         <th style="min-width: 240px;">Ödəniş</th>
                         <th class="text-center text-nowrap emtk-invoice-group-head emtk-invoice-actions-col">Hesab-fakturalar</th>
                         <th class="text-center text-nowrap emtk-invoice-group-head emtk-invoice-actions-col">Qəbz</th>
@@ -149,7 +149,7 @@
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="period" value="{{ selected_period }}">
                                 <input type="hidden" name="amount" value="{{ remaining_debt|round(2) }}">
-                                <button class="btn btn-sm btn-outline-success w-100">Tam ödəniş</button>
+                                <button class="btn btn-sm btn-outline-success w-100">Ödə</button>
                             </form>
                             {% else %}
                             <span class="text-muted small">-</span>

@@ -1587,7 +1587,7 @@ def inject_whatsapp_config():
 def payment_status_label(status: str) -> str:
     return {
         "pending": "gözləmədə",
-        "confirmed": "Təsdiqlənib",
+        "confirmed": "təsdiqlənib",
         "rejected": "İmtina edilib",
     }.get(status or "", status or "")
 
@@ -2055,6 +2055,8 @@ def balance_topup():
 @role_required("resident")
 def select_apartment():
     user = current_user()
+    if Apartment.query.filter_by(owner_user_id=user.id).count() <= 1:
+        return redirect(url_for("dashboard"))
     apartment_id = int(request.form["apartment_id"])
     owned = Apartment.query.filter_by(owner_user_id=user.id, id=apartment_id).first()
     if owned:
