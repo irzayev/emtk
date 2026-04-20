@@ -149,6 +149,7 @@
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="period" value="{{ selected_period }}">
                                 <input type="hidden" name="amount" value="{{ remaining_debt|round(2) }}">
+                                <input type="hidden" name="comment" value="Tam ödəniş">
                                 <button class="btn btn-sm btn-outline-success w-100">Ödə</button>
                             </form>
                             {% else %}

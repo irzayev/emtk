@@ -2042,7 +2042,8 @@ def balance_topup():
     if amount <= 0:
         flash("Məbləğ sıfırdan böyük olmalıdır.", "danger")
         return redirect(url_for("dashboard"))
-    comment = (request.form.get("comment", "") or "").strip() or None
+    comment_raw = (request.form.get("comment", "") or "").strip()
+    comment = comment_raw if comment_raw else "Balans artırılması"
     db.session.add(BalanceTopUp(amount=round(amount, 2), comment=comment, created_by_user_id=current_user().id))
     db.session.commit()
     audit(f"Balans artirildi {amount:.2f} AZN" + (f" ({comment})" if comment else ""))
@@ -2878,7 +2879,8 @@ def add_payment(invoice_id):
         flash("Məbləğ düzgün deyil.", "danger")
         period = (request.form.get("period", "") or "").strip()
         return redirect(url_for("admin_invoices", period=period) if period else url_for("admin_invoices"))
-    comment = (request.form.get("comment", "") or "").strip() or None
+    comment_raw = (request.form.get("comment", "") or "").strip()
+    comment = comment_raw if comment_raw else "Mədaxil"
 
     if amount == 0:
         flash("Məbləğ sıfır ola bilməz.", "danger")

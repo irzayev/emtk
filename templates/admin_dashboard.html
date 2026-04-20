@@ -199,7 +199,7 @@
 
 <div class="card border-0 mb-4">
     <div class="card-body p-4">
-        <h2 class="h6 fw-bold emtk-display mb-3">Balans artırma</h2>
+        <h2 class="h6 fw-bold emtk-display mb-3">Balans artırılması</h2>
         <form method="post" action="{{ url_for('balance_topup') }}" class="row g-2 align-items-end">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="col-md-2">
@@ -207,7 +207,7 @@
                 <input class="form-control" type="number" step="0.01" min="0.01" max="9999" name="amount" required>
             </div>
             <div class="col-md-8">
-                <label class="form-label small">Şərh</label>
+                <label class="form-label small">Qeyd</label>
                 <input class="form-control" name="comment" placeholder="Məs: Sponsor, əlavə yığım, ...">
             </div>
             <div class="col-md-2">
