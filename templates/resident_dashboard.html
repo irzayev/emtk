@@ -224,12 +224,11 @@
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead>
-                    <tr><th>Tarix</th><th>Period</th><th>Məbləğ</th><th>Status</th><th>Qeyd</th></tr>
+                    <tr><th>Period</th><th>Məbləğ</th><th>Status</th><th>Qeyd</th><th>Tarix</th></tr>
                 </thead>
                 <tbody>
                     {% for p in payment_history %}
                     <tr>
-                        <td class="text-secondary small">{{ p.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
                         <td>{{ p.invoice.period }}</td>
                         <td>{{ p.amount|azn }}</td>
                         <td>
@@ -238,6 +237,7 @@
                             </span>
                         </td>
                         <td class="small">{{ p.comment or '' }}</td>
+                        <td class="text-secondary small">{{ p.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
                     </tr>
                     {% else %}
                     <tr><td colspan="5" class="text-secondary">Ödəniş yoxdur.</td></tr>
@@ -254,14 +254,14 @@
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead>
-                    <tr><th>Tarix</th><th>Period</th><th>Ad</th><th>Status</th><th class="text-end">Məbləğ</th></tr>
+                    <tr><th>Period</th><th>Ad</th><th class="text-end">Məbləğ</th><th>Status</th><th>Tarix</th></tr>
                 </thead>
                 <tbody>
                     {% for e in recent_expenses %}
                     <tr>
-                        <td class="text-secondary small">{{ e.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
                         <td class="text-secondary small">{{ e.period }}</td>
                         <td>{{ e.name }}</td>
+                        <td class="text-end text-danger fw-semibold">{{ e.amount|azn }}</td>
                         <td>
                             {% if e.is_paid %}
                                 <span class="badge rounded-pill text-bg-success">ödənilib</span>
@@ -269,7 +269,7 @@
                                 <span class="badge rounded-pill text-bg-warning text-dark">gözləmədə</span>
                             {% endif %}
                         </td>
-                        <td class="text-end text-danger fw-semibold">{{ e.amount|azn }}</td>
+                        <td class="text-secondary small">{{ e.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
                     </tr>
                     {% else %}
                     <tr><td colspan="5" class="text-secondary">Xərc yoxdur.</td></tr>
